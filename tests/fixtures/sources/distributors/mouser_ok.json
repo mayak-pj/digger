@@ -1,0 +1,43 @@
+{
+ "Errors": [],
+ "SearchResults": {
+  "NumberOfResult": 5,
+  "Parts": [
+   {
+    "ManufacturerPartNumber": "NE555P",
+    "Manufacturer": "Texas Instruments",
+    "Description": "Timers & Support Products  Single Precision Timer",
+    "DataSheetUrl": "https://www.ti.com/lit/gpn/ne555",
+    "ProductDetailUrl": "https://www.mouser.com/ProductDetail/example-1"
+   },
+   {
+    "ManufacturerPartNumber": "NE555DR",
+    "Manufacturer": "Texas Instruments",
+    "Description": "Timers & Support Products",
+    "DataSheetUrl": "https://www.ti.com/lit/gpn/ne555",
+    "ProductDetailUrl": "https://www.mouser.com/ProductDetail/example-2"
+   },
+   {
+    "ManufacturerPartNumber": "NE555N",
+    "Manufacturer": "STMicroelectronics",
+    "Description": "Timers & Support Products General Purpose",
+    "DataSheetUrl": "http://www.mouser.com/datasheet/2/000/ne555-example.pdf",
+    "ProductDetailUrl": "https://www.mouser.com/ProductDetail/example-3"
+   },
+   {
+    "ManufacturerPartNumber": "NE555-KIT",
+    "Manufacturer": "Example Kits",
+    "Description": "Engineering Tools",
+    "DataSheetUrl": "",
+    "ProductDetailUrl": "https://www.mouser.com/ProductDetail/example-4"
+   },
+   {
+    "ManufacturerPartNumber": "LM358P",
+    "Manufacturer": "Texas Instruments",
+    "Description": "Operational Amplifiers",
+    "DataSheetUrl": "https://www.ti.com/lit/gpn/lm358",
+    "ProductDetailUrl": "https://www.mouser.com/ProductDetail/example-5"
+   }
+  ]
+ }
+}

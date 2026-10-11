@@ -45,6 +45,7 @@ class FakeHttp:
     def __init__(self) -> None:
         self.routes: Dict[str, object] = {}
         self.calls: List[Tuple[str, str]] = []
+        self.sent: List[Tuple[str, Dict[str, str], bytes]] = []      # запросы с телом: адрес, заголовки, тело
 
     def add(self, url: str, body=b"", status: int = 200, content_type: str = "text/html; charset=utf-8"):
         if isinstance(body, str):
@@ -64,8 +65,10 @@ class FakeHttp:
         self.routes[url] = exc
         return self
 
-    def __call__(self, method: str, url: str, headers: Dict[str, str]):
+    def __call__(self, method: str, url: str, headers: Dict[str, str], data: Optional[bytes] = None):
         self.calls.append((method, url))
+        if data is not None:
+            self.sent.append((url, dict(headers), data))
         r = self.routes.get(url)
         if r is None:
             return FakeResponse(404, b"not found", {"Content-Type": "text/plain"})

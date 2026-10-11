@@ -22,7 +22,7 @@ import os
 import re
 import threading
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlsplit
 
 try:
@@ -160,11 +160,12 @@ class SafeHttp:
             self._session = s
         return self._session
 
-    def _send(self, method: str, url: str, headers: Dict[str, str], timeout: Optional[float] = None):
+    def _send(self, method: str, url: str, headers: Dict[str, str], timeout: Optional[float] = None,
+              data: Optional[bytes] = None):
         """Транспорт: единственное место, где выполняется настоящий HTTP-запрос."""
         if self.transport is not None:
-            return self.transport(method, url, headers)
-        return self._get_session().request(method, url, headers=headers, timeout=timeout or self.timeout,
+            return self.transport(method, url, headers) if data is None else self.transport(method, url, headers, data)
+        return self._get_session().request(method, url, headers=headers, timeout=timeout or self.timeout, data=data,
                                            allow_redirects=False, stream=True, verify=True)
 
     def _throttle(self, host: str) -> None:
@@ -180,10 +181,12 @@ class SafeHttp:
     # ---------- запросы ----------
     def _request(self, url: str, max_bytes: int, method: str = "GET",
                  accept: str = "*/*", referer: str = "",
-                 truncate: bool = False, timeout: Optional[float] = None) -> Tuple[str, Dict[str, str], bytes, int]:
+                 truncate: bool = False, timeout: Optional[float] = None, data: Optional[bytes] = None,
+                 extra: Optional[Dict[str, str]] = None) -> Tuple[str, Dict[str, str], bytes, int]:
         """Возвращает (финальный_url, заголовки, тело, статус). Редиректы проверяются вручную.
 
-        truncate=True — тело больше max_bytes обрезается (для проб), иначе NetBlocked."""
+        truncate=True — тело больше max_bytes обрезается (для проб), иначе NetBlocked.
+        data, extra — тело и заголовки запроса к API (`post_json`): такой запрос по перенаправлению не идёт."""
         if self.offline:
             raise NetBlocked("Автономный режим: интернет выключен в настройках")
         cur = url
@@ -194,13 +197,18 @@ class SafeHttp:
             headers = {"Accept": accept}
             if referer:
                 headers["Referer"] = referer
+            headers.update(extra or {})
             t0 = time.time()
             try:
-                r = self._send(method, cur, headers, timeout)
+                r = self._send(method, cur, headers, timeout, data)
             except Exception as e:
                 net_log.info("ERR\t%s\t%s", _masked(cur), type(e).__name__)
                 raise
             if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("Location"):
+                if data is not None or extra:     # ключ API в теле или заголовках на другой адрес не уходит
+                    net_log.info("%s\t%s\tперенаправление запроса к API запрещено", r.status_code, _masked(cur))
+                    r.close()
+                    raise NetBlocked("Перенаправление запроса к API запрещено")
                 nxt = urljoin(cur, r.headers["Location"])
                 nparts = urlsplit(nxt)
                 if nparts.scheme == "http" and not domain_match(host_of(nxt), self.allow_http):
@@ -260,6 +268,25 @@ class SafeHttp:
     def get_json(self, url: str):
         import json
         final, hdrs, body, status = self._request(url, self.max_html, accept="application/json")
+        if status >= 400:
+            raise HttpStatus(status, hdrs, body)
+        return json.loads(body.decode("utf-8", errors="replace"))
+
+    def post_json(self, url: str, payload: Any = None, form: Optional[Dict[str, str]] = None,
+                  headers: Optional[Dict[str, str]] = None):
+        """Запрос к API с телом: `payload` — JSON, `form` — поля формы (выдача пропуска OAuth2). Те же правила,
+        что у `get_json` (белый список, HTTPS, сертификаты, частота); тело и заголовки в журнал не пишутся."""
+        import json
+        from urllib.parse import urlencode
+        extra = dict(headers or {})
+        if form is not None:
+            data = urlencode(form).encode("utf-8")
+            extra["Content-Type"] = "application/x-www-form-urlencoded"
+        else:
+            data = json.dumps(payload if payload is not None else {}).encode("utf-8")
+            extra["Content-Type"] = "application/json"
+        final, hdrs, body, status = self._request(url, self.max_html, method="POST", accept="application/json",
+                                                  data=data, extra=extra)
         if status >= 400:
             raise HttpStatus(status, hdrs, body)
         return json.loads(body.decode("utf-8", errors="replace"))

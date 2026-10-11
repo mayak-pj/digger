@@ -73,6 +73,8 @@
        "{part} site:promelec.ru OR site:efo.ru OR site:compel.ru OR site:elitan.ru",
        "{part} купить site:ozon.ru"
      ]},
+    {"id": "mouser_api", "adapter": "mouser_api", "name": "Mouser API", "level": "world", "lang": "en", "label": "Mouser", "url": "https://api.mouser.com/api/v1/search/partnumber?apiKey={key}", "domains": ["api.mouser.com"], "needs_key": "mouser", "enabled": true},
+    {"id": "digikey_api", "adapter": "digikey_api", "name": "DigiKey API", "level": "world", "lang": "en", "label": "DigiKey", "url": "https://api.digikey.com/products/v4/search/keyword", "token_url": "https://api.digikey.com/v1/oauth2/token", "domains": ["api.digikey.com"], "needs_key": "digikey", "enabled": true},
     {"id": "world_queries", "adapter": "engine_queries", "name": "Мировые магазины через поисковики", "level": "world", "lang": "en", "enabled": true,
      "via": ["duckduckgo", "bing", "brave"],
      "queries": [

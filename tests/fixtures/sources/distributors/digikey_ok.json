@@ -1,0 +1,47 @@
+{
+ "Products": [
+  {
+   "ManufacturerProductNumber": "W25Q64JVSSIQ",
+   "Manufacturer": {
+    "Id": 1,
+    "Name": "Winbond Electronics"
+   },
+   "Description": {
+    "ProductDescription": "IC FLASH 64MBIT SPI/QUAD 8SOIC",
+    "DetailedDescription": "FLASH - NOR Memory IC 64Mbit"
+   },
+   "DatasheetUrl": "https://www.winbond.com/resource-files/w25q64jv-example.pdf",
+   "ProductUrl": "https://www.digikey.com/en/products/detail/example/1"
+  },
+  {
+   "ManufacturerProductNumber": "W25Q64JVZPIQ",
+   "Manufacturer": {
+    "Id": 1,
+    "Name": "Winbond Electronics"
+   },
+   "Description": {
+    "ProductDescription": "IC FLASH 64MBIT SPI/QUAD 8WSON"
+   },
+   "DatasheetUrl": "//media.digikey.com/pdf/Data%20Sheets/Example/W25Q64JV.pdf",
+   "ProductUrl": "https://www.digikey.com/en/products/detail/example/2"
+  },
+  {
+   "ManufacturerProductNumber": "W25Q64FVSSIG",
+   "Manufacturer": {
+    "Id": 1,
+    "Name": "Winbond Electronics"
+   },
+   "Description": {
+    "ProductDescription": "IC FLASH 64MBIT"
+   },
+   "DatasheetUrl": "https://www.winbond.com/resource-files/w25q64fv-example.pdf"
+  },
+  {
+   "ManufacturerProductNumber": "W25Q64JVSFIQ",
+   "Manufacturer": null,
+   "Description": null,
+   "DatasheetUrl": null
+  }
+ ],
+ "ProductsCount": 4
+}

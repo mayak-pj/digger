@@ -22,7 +22,7 @@ ADAPTERS: Dict[str, Type[SourceAdapter]] = {}
 
 # модули digger/acquire/sources/: новый адаптер добавляется сюда
 BUILTIN = ("google_api", "engine_html", "makers", "catalogs.alldatasheet", "catalogs.datasheet4u", "catalogs.partlist",
-           "catalogs.china", "github_api", "engine_queries")
+           "catalogs.china", "github_api", "engine_queries", "distributors")
 
 
 def load_builtin() -> None:
