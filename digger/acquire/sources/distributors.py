@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""API дистрибьюторов: Mouser и DigiKey (ARCHITECTURE §4.2, шаг 9.3).
+"""API дистрибьюторов: Mouser, DigiKey и Nexar/Octopart (ARCHITECTURE §4.2, шаг 9.3).
 
 Дистрибьютор по партномеру отдаёт карточки товаров, в карточке — ссылка на datasheet; поисковики и разбор
 страниц не нужны. Работают только с ключом (`config.json → acquire.api_keys`), без ключа — «нет ключа, пропуск»:
 
     "mouser":  {"key": "…"}                                  mouser.com → My Account → APIs → Search API
     "digikey": {"client_id": "…", "client_secret": "…"}      developer.digikey.com → Product Information V4
+    "nexar":   {"client_id": "…", "client_secret": "…"}      nexar.com → Apps (Octopart, GraphQL)
 
 Ключ уходит только на сайт своего дистрибьютора (`SafeHttp.post_json`, перенаправления запрещены) и не попадает
 ни в события, ни в журналы. Результат — ссылки на datasheet (`kind="pdf"`); страницы товаров не берутся.
@@ -102,12 +103,9 @@ class MouserApi(DistributorApi):
                        item.get("Description", ""), item.get("DataSheetUrl", ""))
 
 
-@register
-class DigikeyApi(DistributorApi):
-    adapter = "digikey_api"
-    title = "DigiKey"
-    URL = "https://api.digikey.com/products/v4/search/keyword"
-    TOKEN_URL = "https://api.digikey.com/v1/oauth2/token"
+class OAuthApi(DistributorApi):
+    """Дистрибьютор с пропуском OAuth2 (client credentials): пропуск живёт минуты и хранится только в памяти."""
+    TOKEN_URL = ""
     _clock = staticmethod(time.monotonic)
 
     def _token(self, http: Any) -> str:
@@ -129,6 +127,14 @@ class DigikeyApi(DistributorApi):
         self._cached = (token, self._clock() + max(0.0, seconds - 60))
         return token
 
+
+@register
+class DigikeyApi(OAuthApi):
+    adapter = "digikey_api"
+    title = "DigiKey"
+    URL = "https://api.digikey.com/products/v4/search/keyword"
+    TOKEN_URL = "https://api.digikey.com/v1/oauth2/token"
+
     def cards(self, part: str, http: Any) -> Iterable[Tuple[str, str, str, str]]:
         key = self.key or {}
         headers: Dict[str, str] = {"X-DIGIKEY-Client-Id": str(key.get("client_id", "")),
@@ -147,3 +153,45 @@ class DigikeyApi(DistributorApi):
             yield (item.get("ManufacturerProductNumber", ""), maker.get("Name", "") if isinstance(maker, dict) else maker,
                    (text.get("ProductDescription") or text.get("DetailedDescription", "")) if isinstance(text, dict) else text,
                    item.get("DatasheetUrl", ""))
+
+
+@register
+class NexarApi(OAuthApi):
+    """Nexar (Octopart): GraphQL `supSearchMpn`; ссылка на datasheet — `bestDatasheet` и документы-datasheet."""
+    adapter = "nexar_api"
+    title = "Nexar"
+    URL = "https://api.nexar.com/graphql"
+    TOKEN_URL = "https://identity.nexar.com/connect/token"
+    QUERY = ("query Mpn($q: String!) { supSearchMpn(q: $q, limit: 10) { results { part { mpn "
+             "manufacturer { name } shortDescription bestDatasheet { url } "
+             "documentCollections { name documents { name url } } } } } }")
+
+    def cards(self, part: str, http: Any) -> Iterable[Tuple[str, str, str, str]]:
+        headers = {"Authorization": "Bearer " + self._token(http)}
+        try:
+            data = http.post_json(self.entry.options.get("url") or self.URL,
+                                  {"query": self.QUERY, "variables": {"q": part}}, headers=headers)
+        except Exception as e:      # noqa: BLE001
+            if str(e) in _DENIED:
+                self._cached = ("", 0.0)
+            raise
+        data = data if isinstance(data, dict) else {}
+        errors = [e for e in data.get("errors") or [] if isinstance(e, dict)]
+        if errors:                  # GraphQL отвечает кодом 200 и пишет ошибку в тело
+            message = _text(errors[0].get("message") or "ошибка")
+            limit = re.search(r"too many|limit|quota|exceed|rate", message, re.I)
+            raise SourceError("engine.quota" if limit else "engine.error", message[:120])
+        found = ((data.get("data") or {}).get("supSearchMpn") or {}).get("results") or []
+        for item in found:
+            card = item.get("part") if isinstance(item, dict) else None
+            if not isinstance(card, dict):
+                continue
+            maker, best = card.get("manufacturer") or {}, card.get("bestDatasheet") or {}
+            links = [best.get("url", "") if isinstance(best, dict) else ""]
+            for group in card.get("documentCollections") or []:
+                if isinstance(group, dict) and "datasheet" in str(group.get("name", "")).lower():
+                    links += [d.get("url", "") for d in group.get("documents") or [] if isinstance(d, dict)]
+            for link in links:
+                if link:
+                    yield (card.get("mpn", ""), maker.get("name", "") if isinstance(maker, dict) else "",
+                           card.get("shortDescription", ""), link)

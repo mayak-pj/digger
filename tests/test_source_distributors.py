@@ -9,7 +9,7 @@ import pytest
 from digger.acquire.events import LANGS, EventBus, render
 from digger.acquire.query import Query
 from digger.acquire.registry import ADAPTERS, Registry
-from digger.acquire.sources.distributors import DigikeyApi, MouserApi
+from digger.acquire.sources.distributors import DigikeyApi, MouserApi, NexarApi
 from digger.core.netsafe import NetBlocked, SafeHttp
 from tests.fakes.fake_http import FakeHttp
 
@@ -21,7 +21,10 @@ MOUSER_URL = "https://api.mouser.com/api/v1/search/partnumber?apiKey=mouser-secr
 DIGIKEY_KEY = {"client_id": "dk-client", "client_secret": "dk-secret-2"}
 TOKEN_URL = "https://api.digikey.com/v1/oauth2/token"
 DIGIKEY_URL = "https://api.digikey.com/products/v4/search/keyword"
-KEYS = {"mouser": MOUSER_KEY, "digikey": DIGIKEY_KEY}
+NEXAR_KEY = {"client_id": "nx-client", "client_secret": "nx-secret-3"}
+NEXAR_TOKEN_URL = "https://identity.nexar.com/connect/token"
+NEXAR_URL = "https://api.nexar.com/graphql"
+KEYS = {"mouser": MOUSER_KEY, "digikey": DIGIKEY_KEY, "nexar": NEXAR_KEY}
 
 
 def make(tmp_path, source_id, keys=KEYS):
@@ -43,7 +46,8 @@ def test_registered_in_sources_json_and_whitelist():
     assert ADAPTERS["mouser_api"] is MouserApi and ADAPTERS["digikey_api"] is DigikeyApi and not reg.missing
     assert by["mouser_api"].available and by["digikey_api"].available
     assert by["mouser_api"].family == "market" and by["mouser_api"].label == "Mouser"
-    assert {"api.mouser.com", "api.digikey.com"} <= set(reg.allowed_domains())
+    assert ADAPTERS["nexar_api"] is NexarApi and by["nexar_api"].available and by["nexar_api"].label == "Nexar"
+    assert {"api.mouser.com", "api.digikey.com", "api.nexar.com", "identity.nexar.com"} <= set(reg.allowed_domains())
     assert list(by) .index("mouser_api") < list(by).index("world_queries")       # API — раньше поисковиков
 
 
@@ -51,11 +55,13 @@ def test_default_config_has_empty_keys():
     with open(os.path.join(APP, "config.default.json"), encoding="utf-8") as f:
         keys = json.load(f)["acquire"]["api_keys"]
     assert keys["mouser"] == {"key": ""} and keys["digikey"] == {"client_id": "", "client_secret": ""}
+    assert keys["nexar"] == {"client_id": "", "client_secret": ""}
 
 
 @pytest.mark.parametrize("source_id, keys", [
     ("mouser_api", {}), ("mouser_api", {"mouser": {"key": ""}}),
-    ("digikey_api", {}), ("digikey_api", {"digikey": {"client_id": "x", "client_secret": ""}})])
+    ("digikey_api", {}), ("digikey_api", {"digikey": {"client_id": "x", "client_secret": ""}}),
+    ("nexar_api", {}), ("nexar_api", {"nexar": {"client_id": "x", "client_secret": ""}})])
 def test_no_key_skips_without_request(tmp_path, source_id, keys):
     ad, http, fake, events = make(tmp_path, source_id, keys)
     assert ad.search(part("NE555"), http) == []
@@ -145,6 +151,68 @@ def test_digikey_errors(tmp_path):
     fake.add_fixture(DIGIKEY_URL, os.path.join(FIX, "digikey_ok.json"), content_type=JSON)
     assert len(ad.search(part("W25Q64JV"), http)) == 2
     assert [u for _, u in fake.calls].count(TOKEN_URL) == before + 1
+
+
+def nexar_ready(fake):
+    fake.add_fixture(NEXAR_TOKEN_URL, os.path.join(FIX, "nexar_token.json"), content_type=JSON)
+
+
+def test_nexar_token_then_graphql(tmp_path):
+    ad, http, fake, events = make(tmp_path, "nexar_api")
+    nexar_ready(fake)
+    fake.add_fixture(NEXAR_URL, os.path.join(FIX, "nexar_ok.json"), content_type=JSON)
+    leads = ad.search(part("NE555"), http)
+    assert [l.url for l in leads] == ["https://www.ti.com/lit/gpn/ne555", "https://octopart-example.net/ne555-revb.pdf"]
+    assert leads[0].title == "NE555P Texas Instruments" and leads[0].snippet == "Precision Timer"
+    assert all(l.kind == "pdf" and l.source_id == "nexar_api" and l.level == "world" for l in leads)
+    assert fake.calls == [("POST", NEXAR_TOKEN_URL), ("POST", NEXAR_URL)]
+    (_, token_headers, token_body), (_, headers, body) = fake.sent
+    assert token_body == b"client_id=nx-client&client_secret=nx-secret-3&grant_type=client_credentials"
+    assert headers["Authorization"] == "Bearer nx-tok-9"
+    sent = json.loads(body.decode("utf-8"))
+    assert sent["variables"] == {"q": "NE555"} and "supSearchMpn" in sent["query"] and "bestDatasheet" in sent["query"]
+    assert [e.key for e in events] == ["market.search", "market.found"]
+
+
+def test_nexar_token_is_reused(tmp_path):
+    ad, http, fake, _ = make(tmp_path, "nexar_api")
+    nexar_ready(fake)
+    fake.add_fixture(NEXAR_URL, os.path.join(FIX, "nexar_ok.json"), content_type=JSON)
+    ad.search(part("NE555"), http)
+    ad.search(part("NE555"), http)
+    assert [u for _, u in fake.calls].count(NEXAR_TOKEN_URL) == 1
+
+
+def test_nexar_errors(tmp_path):
+    ad, http, fake, events = make(tmp_path, "nexar_api")
+    fake.add(NEXAR_TOKEN_URL, json.dumps({"error": "invalid_client"}), status=400, content_type=JSON)
+    assert ad.search(part("NE555"), http) == [] and events[-1].key == "engine.error"
+    nexar_ready(fake)
+    fake.add(NEXAR_URL, json.dumps({"errors": [{"message": "Part limit exceeded for this plan"}]}), content_type=JSON)
+    assert ad.search(part("NE555"), http) == [] and events[-1].key == "engine.quota"
+    fake.add(NEXAR_URL, json.dumps({"errors": [{"message": "Cannot query field x"}]}), content_type=JSON)
+    assert ad.search(part("NE555"), http) == [] and events[-1].key == "engine.error"
+    fake.add(NEXAR_URL, json.dumps({"data": {"supSearchMpn": {"results": []}}}), content_type=JSON)
+    assert ad.search(part("NE555"), http) == [] and events[-1].key == "market.empty"
+    fake.add(NEXAR_URL, "{}", status=429, content_type=JSON)
+    assert ad.search(part("NE555"), http) == [] and events[-1].key == "engine.quota"
+    fake.add(NEXAR_URL, "{}", status=401, content_type=JSON)                 # пропуск отозван — берётся новый
+    before = [u for _, u in fake.calls].count(NEXAR_TOKEN_URL)
+    ad.search(part("NE555"), http)
+    fake.add_fixture(NEXAR_URL, os.path.join(FIX, "nexar_ok.json"), content_type=JSON)
+    assert len(ad.search(part("NE555"), http)) == 2
+    assert [u for _, u in fake.calls].count(NEXAR_TOKEN_URL) == before + 1
+
+
+def test_nexar_secrets_stay_out(tmp_path, caplog):
+    with caplog.at_level(logging.DEBUG):
+        ad, http, fake, events = make(tmp_path, "nexar_api")
+        nexar_ready(fake)
+        fake.add(NEXAR_URL, "{}", status=500, content_type=JSON)
+        ad.search(part("NE555"), http)
+        text = " ".join(render(e, lang) for e in events for lang in LANGS) + repr([e.to_dict() for e in events])
+    for secret in ("nx-secret-3", "nx-tok-9"):
+        assert secret not in text and secret not in caplog.text
 
 
 def test_secrets_stay_out_of_events_and_logs(tmp_path, caplog):

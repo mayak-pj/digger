@@ -1,0 +1,20 @@
+{
+ "data": {
+  "supSearchMpn": {
+   "results": [
+    {"part": {"mpn": "NE555P", "manufacturer": {"name": "Texas Instruments"},
+              "shortDescription": "Precision Timer",
+              "bestDatasheet": {"url": "https://www.ti.com/lit/gpn/ne555"},
+              "documentCollections": [
+               {"name": "Datasheets", "documents": [
+                 {"name": "NE555 datasheet", "url": "https://www.ti.com/lit/gpn/ne555"},
+                 {"name": "NE555 rev B", "url": "https://octopart-example.net/ne555-revb.pdf"}]},
+               {"name": "Reference Designs", "documents": [{"name": "Ref", "url": "https://example.net/ref.pdf"}]}]}},
+    {"part": {"mpn": "LM358", "manufacturer": {"name": "Other"}, "shortDescription": "Op amp",
+              "bestDatasheet": {"url": "https://example.net/lm358.pdf"}, "documentCollections": []}},
+    {"part": {"mpn": "NE555DR", "manufacturer": {"name": "Texas Instruments"}, "shortDescription": "Timer SOIC",
+              "bestDatasheet": null, "documentCollections": null}}
+   ]
+  }
+ }
+}

@@ -67,7 +67,8 @@
 
   "acquire": {
     "api_keys": {"google_api": {"key": "", "cx": ""}, "mouser": {"key": ""},
-                 "digikey": {"client_id": "", "client_secret": ""}},
+                 "digikey": {"client_id": "", "client_secret": ""},
+                 "nexar": {"client_id": "", "client_secret": ""}},
     "budget": {"queries": 60, "downloads": 10, "seconds": 180},
     "languages": ["en", "zh", "ru"],
     "parallel": 3,

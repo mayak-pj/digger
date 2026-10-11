@@ -382,7 +382,8 @@ Claude Code сам берёт первый шаг с `[ ]`, пишет тест�
 - [x] `Sonnet` 9.2 OCR сканированных datasheet (картинки страниц из PDF + Tesseract), чтобы сканы тоже проверялись.
 - [ ] `Sonnet` 9.3 API дистрибьюторов (Nexar/Octopart, Mouser, DigiKey, LCSC) — когда будут ключи и доступ.
   - [x] `Sonnet` 9.3a Mouser и DigiKey: адаптеры по описанию API, без ключа — пропуск; `SafeHttp.post_json`.
-  - [ ] `Sonnet` 9.3b Nexar/Octopart (OAuth2 + GraphQL); проверить, отдаёт ли бесплатный тариф ссылки на datasheet.
+  - [x] `Sonnet` 9.3b Nexar/Octopart (OAuth2 + GraphQL); проверить, отдаёт ли бесплатный тариф ссылки на datasheet
+    (проверит 9.3c с настоящим ключом).
   - [ ] `Sonnet` 9.3c Доводка Mouser и DigiKey по настоящим ответам — когда пользователь впишет ключи
     (статус в «Диагностика источников» / проверке `adapters` набора).
   - [ ] `Sonnet` 9.3d LCSC — когда одобрят заявку на API и будет его описание.
