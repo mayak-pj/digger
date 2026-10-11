@@ -40,7 +40,7 @@ from .rank import normalize_url, score_lead
 from .stats import QUERY_KEYS
 from .store import AcquireStore, _now
 from .validate import MAX_MB, validate_pdf
-from .verify import SourceTrust, verify_file
+from .verify import SourceTrust, verify_file, with_copies
 
 log = logging.getLogger("digger.acquire.orchestrator")
 LEADS_PER_LEVEL = 4       # сколько лучших ссылок уровня проверяется, прежде чем идти на следующий
@@ -372,10 +372,15 @@ class Orchestrator:
             rec.facts, evidence = verify_file(path, ctx, url=rec.fetch.final_url or lead.url, trust=self.trust,
                                               weights=self.weights,
                                               progress=lambda n: self._emit("scan.ocr", pages=n, **kw))
+            others = [_raw(r) for r in res.records]
+            sites = confirm_mod.agreeing_sites(rec, others, self.owners)      # E10: тот же документ с других сайтов
+            if len(sites) >= confirm_mod.INDEPENDENT_SITES:
+                evidence = with_copies(evidence, sites, self.weights)
+                others = [self._copy_seen(o, rec, sites) for o in others]
             rec.verdict = decide(evidence, validation, self.thresholds, ocr=bool(rec.facts.ocr_pages))
             self._report(rec, kw)
             if rec.verdict.status == "confirmed":
-                found = confirm_mod.confirm(rec, [_raw(r) for r in res.records], self.trust, self.owners)
+                found = confirm_mod.confirm(rec, others, self.trust, self.owners)
                 if found.rule == confirm_mod.RULE_INDEPENDENT:
                     others = [s for s in found.sites if s != confirm_mod.site_of(lead.url)]
                     self._emit("confirm.identical", site=", ".join(others or found.sites), **kw)
@@ -386,6 +391,17 @@ class Orchestrator:
         self.store.save(rec)
         res.records.append(rec)
         return rec.verdict.status == "confirmed"
+
+    def _copy_seen(self, other: AcquisitionRecord, rec: AcquisitionRecord, sites: Sequence[str]) -> AcquisitionRecord:
+        """Раньше скачанная копия того же документа, оценённая заново с уликой E10: когда её проверяли, второго
+        сайта ещё не было. Сохранённая запись не меняется — оценка нужна правилу «два независимых сайта»."""
+        v = other.verdict
+        if (v is None or other.facts is None or v.status not in ("probable", "confirmed")
+                or not confirm_mod.same_document(rec, other)):
+            return other
+        again = decide(with_copies(v.evidence, sites, self.weights), None, self.thresholds,
+                       ocr=bool(other.facts.ocr_pages))
+        return replace(other, verdict=again)
 
     def _report(self, rec: AcquisitionRecord, kw: Dict[str, Any]) -> None:
         """Событие сверки: что совпало с фото (улики E1/E3 — партномер, E6 — производитель, E7 — корпус)."""

@@ -135,6 +135,18 @@ def collect(facts: DocFacts, ctx: PhotoContext, url: str = "", trust: Optional[S
     return out
 
 
+def with_copies(evidence: Sequence[Evidence], domains: Sequence[str],
+                weights: Optional[Mapping[str, Any]] = None) -> List[Evidence]:
+    """Улики с добавленной E10: тот же документ получен с этих независимых сайтов. Копии находятся уже после
+    чтения файла (нужны sha256 и отпечаток текста), поэтому E10 дописывается к готовым уликам."""
+    out = list(evidence)
+    same = list(dict.fromkeys(d.lower() for d in domains if d))
+    points = merge_weights(weights)["E10"]
+    if len(same) >= INDEPENDENT_DOMAINS and points and not any(e.code == "E10" for e in out):
+        out.append(Evidence(code="E10", points=int(points), detail=", ".join(same)))
+    return out
+
+
 def _norm(text: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", (text or "").upper())
 

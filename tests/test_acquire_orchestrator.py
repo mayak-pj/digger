@@ -367,3 +367,23 @@ def test_maker_is_taken_from_part_family_when_photo_gave_none(env):
     assert (orch._ctx.manufacturer, orch._ctx.maker_guessed) == ("GigaDevice", False)
     orch.search(PhotoContext(part="NE555"))
     assert (orch._ctx.manufacturer, orch._ctx.maker_guessed) == ("", False)
+
+
+def test_same_document_on_two_sites_confirms_search_by_part_only(env):
+    """Поиск по одному партномеру (ни производителя, ни корпуса): одной копии до «подтверждено» не хватает баллов,
+    тот же документ со второго независимого сайта добавляет улику E10 обеим копиям (шаг 8.4c)."""
+    fake = pdf_at(FakeHttp(), env[2], ALL % "a", D4U)
+    orch, bus = build(env, fake, [source("s1", "one", ALL % "a"), source("s2", "two", D4U)])
+    res = orch.search(PhotoContext(part="NE555P"))
+    first, second = res.records
+    assert first.verdict.status == "probable" and not first.verdict.has("E10")
+    assert second.verdict.status == "confirmed" and second.verdict.has("E10") and res.status == "confirmed"
+    assert sorted(res.best.sources_agreeing) == ["alldatasheet.com", "datasheet4u.com"]
+    assert "confirm.identical" in keys(bus)
+
+
+def test_same_document_twice_on_one_site_is_not_a_second_source(env):
+    fake = pdf_at(FakeHttp(), env[2], ALL % "a", ALL % "b")
+    orch, _ = build(env, fake, [source("s1", "one", ALL % "a"), source("s2", "two", ALL % "b")])
+    res = orch.search(PhotoContext(part="NE555P"))
+    assert res.status == "probable" and not any(r.verdict.has("E10") for r in res.records)

@@ -199,3 +199,13 @@ def test_my_pdfs(my_test_dir):
         f = extract_facts(os.path.join(my_test_dir, name), hints=[part])
         assert f.has_text and f.pages > 0 and f.language, name
         assert any(part.upper() in p or p in part.upper() for p in f.parts_found), (name, list(f.parts_found)[:20])
+
+
+def test_family_written_with_leading_placeholder():
+    """Запись семейства в заголовках TI: «xx555 Precision Timers» — это NE555, SA555…; «LMx58» — LM158/258/358."""
+    f = facts_from_text(DocText(texts={1: "xx555 Precision Timers\nLMx58, LMx58x Dual Operational Amplifiers"}), [])
+    assert f.family_patterns == ["xx555", "LMx58", "LMx58x"]
+    assert covers("xx555", "NE555") and covers("xx555", "SA555P") and not covers("xx555", "NE5551")
+    assert covers("LMx58", "LM358") and covers("LMx58", "LM258A") and not covers("LMx58", "LM3580")
+    assert not covers("xx555", "NE556") and not covers("LMx58", "LM324")
+    assert facts_from_text(DocText(texts={1: "max 5x gain, xx55 and axxx5551 are not families"}), []).family_patterns == []

@@ -49,6 +49,8 @@ _NOISE_RE = re.compile(r"\d+[A-Z]{1,4}$|0X[0-9A-F]+$|00[0-9A-F]+$|[0-9A-F]+0000$
                        r"(?:ISO|IEC|JESD|JEP|AEC|MIL|EN|UL|RS|EIA|IPC|ANSI|IEEE|USB|REV|VER|AN|DDR|CISPR|MSL|"
                        r"GPIO|ADC|DAC|UART|USART|TIM|FIG|TABLE|NOTE|PIN)\d+[A-Z]?$")
 _FAMILY_X_RE = re.compile(r"(?<![A-Za-z0-9])[A-Z]{1,6}\d[A-Z0-9]*(?:x+|XX+)[A-Z0-9]*(?:x+[A-Z0-9]*)*(?![A-Za-z0-9])")
+# Запись семейства у TI: «xx555» (NE555, SA555…), «LMx58», «TLx4xx» — подстановка до первой цифры.
+_FAMILY_LEAD_X_RE = re.compile(r"(?<![A-Za-z0-9])(?:xx\d{3,4}|[A-Z]{2,4}x\d{2,3}x{0,2})(?![A-Za-z0-9])")
 _FAMILY_ENUM_RE = re.compile(r"(?<![A-Za-z0-9])[A-Z]{0,5}\d{2}[A-Z]{1,3}\d{2,4}[A-Z]?"
                              r"(?:\s?[/_]\s?\d{2,4}[A-Z]?){1,10}(?![A-Za-z0-9])")
 _ENUM_SPLIT_RE = re.compile(r"([A-Z]{0,5}\d{2}[A-Z]{1,3})(\d{2,4})[A-Z]?((?:[/_]\d{2,4}[A-Z]?)+)$")
@@ -352,6 +354,8 @@ def _families(text: str) -> Iterable[str]:
         token = m.group(0)
         if len(token) >= 6 and sum(c.isdigit() for c in token) >= 2:
             found.append((m.start(), token))
+    for m in _FAMILY_LEAD_X_RE.finditer(text):
+        found.append((m.start(), m.group(0)))
     for m in _FAMILY_ENUM_RE.finditer(text):
         found.append((m.start(), re.sub(r"\s+", "", m.group(0))))
     return [token for _, token in sorted(found)]
@@ -393,4 +397,5 @@ def covers(pattern: str, part: str) -> bool:
     body = re.sub(r"x+|XX+", lambda x: "[A-Z0-9]{%d}" % len(x.group(0)), pattern)
     if body == pattern or not pattern.isalnum():
         return False
-    return re.match(body.upper(), p) is not None
+    tail = r"(?!\d)" if pattern[-1].isdigit() else ""        # «LMx58» — это LM358A, но не LM3580
+    return re.match(body.upper() + tail, p) is not None
