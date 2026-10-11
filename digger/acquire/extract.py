@@ -5,6 +5,7 @@
 заголовок первой страницы — строки самым крупным шрифтом. `facts_from_text` — чистая функция: из текста
 собирает `DocFacts` (партномера по страницам, шаблоны семейств, корпуса, производители, заказные коды,
 коды маркировки, язык). `extract_facts` — то и другое; исключений не бросает.
+Страницы без текстового слоя (скан) читает `scanocr.py`; какие страницы прочитаны так — `ocr_pages`.
 
 Здесь только «что написано в документе». Подходит ли документ к искомому чипу, решают `classify.py` и
 `verify.py`; им же нужен `covers` — покрывает ли шаблон семейства партномер.
@@ -16,8 +17,9 @@ import math
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from . import scanocr
 from .fingerprint import fingerprint_pages
 from .models import DocFacts
 
@@ -124,6 +126,7 @@ class DocText:
     producer: str = ""
     author: str = ""
     heading: str = ""                                        # строки первой страницы самым крупным шрифтом
+    ocr_pages: List[int] = field(default_factory=list)      # страницы, текст которых распознан с картинки
 
 
 def extract_facts(path: str, hints: Sequence[str] = ()) -> DocFacts:
@@ -131,12 +134,17 @@ def extract_facts(path: str, hints: Sequence[str] = ()) -> DocFacts:
     return facts_from_text(read_document(path), hints)
 
 
-def read_document(path: str, head_pages: int = HEAD_PAGES, tail_pages: int = TAIL_PAGES) -> DocText:
+def read_document(path: str, head_pages: int = HEAD_PAGES, tail_pages: int = TAIL_PAGES,
+                  progress: Optional[Callable[[int], None]] = None) -> DocText:
+    """`progress(n)` — перед распознаванием скана: сколько страниц будет прочитано (это секунды)."""
     doc = DocText()
     try:
         _read(path, doc, head_pages, tail_pages)
     except (Exception, RecursionError) as e:      # noqa: BLE001 — pypdf на битом файле бросает что угодно
         log.info("не читается %s: %s: %s", path, type(e).__name__, e)
+    for n, text in sorted(scanocr.ocr_pages(path, scanocr.scan_pages(doc.texts), progress).items()):
+        doc.texts[n] = (doc.texts[n] + "\n" + _clean(text)).strip()
+        doc.ocr_pages.append(n)
     return doc
 
 
@@ -224,6 +232,7 @@ def facts_from_text(doc: DocText, hints: Sequence[str] = ()) -> DocFacts:
     numbers = sorted(doc.texts)
     whole = "\n".join(doc.texts[n] for n in numbers)
     facts.has_text = len("".join(whole.split())) >= TEXT_MIN_CHARS
+    facts.ocr_pages = list(doc.ocr_pages)
     if not facts.has_text:
         facts.heading = ""
         return facts

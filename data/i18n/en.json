@@ -51,6 +51,7 @@
   "validate.active_content": "File check: active content ({what}), rejected",
   "validate.too_big": "File check: too large ({size:size}), rejected",
 
+  "scan.ocr": "Scan without text: reading {pages:page|pages} with OCR",
   "verify.result": "Content check: part {part_ok} package {package} {package_ok} maker {maker} {maker_ok} — {score:point|points}",
   "verify.rejected": "Content check: not a document for {part} — {score:point|points}",
 

@@ -72,8 +72,9 @@ def check_manual_pdf(path: str, ctx: PhotoContext, store: AcquireStore, quaranti
     if not validation.ok:
         rec.verdict = decide([], validation)
         return _finish(rec, store)
-    rec.facts, evidence = verify_file(qpath, ctx, url=url, trust=trust, weights=weights)
-    rec.verdict = decide(evidence, validation, thresholds)
+    rec.facts, evidence = verify_file(qpath, ctx, url=url, trust=trust, weights=weights,
+                                      progress=lambda n: emit("scan.ocr", pages=n, **kw))
+    rec.verdict = decide(evidence, validation, thresholds, ocr=bool(rec.facts.ocr_pages))
     rec = confirm_mod.apply(rec, confirm_mod.confirm(rec, others, trust, owners, user=user))
     return _finish(rec, store)
 

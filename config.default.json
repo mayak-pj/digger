@@ -78,7 +78,9 @@
       "E6_match": 10, "E6_conflict": -15, "E7_match": 10, "E7_conflict": -10, "E8": 10,
       "E9_maker": 10, "E9_catalog": 5, "E9_bad": -10, "E10": 10, "E11": -30
     },
-    "thresholds": {"confirmed": 70, "probable": 45}
+    "thresholds": {"confirmed": 70, "probable": 45},
+    "scan_ocr": {"enabled": true, "lang": "eng", "head_pages": 4, "tail_pages": 2, "page_seconds": 30,
+                 "total_seconds": 60}
   },
 
   "ui": {"theme": "light", "follow_recognition": true},

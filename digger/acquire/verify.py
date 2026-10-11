@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
 from . import classify as doc_types
@@ -74,9 +74,10 @@ def merge_weights(weights: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]
 
 def verify_file(path: str, ctx: PhotoContext, url: str = "", trust: Optional[SourceTrust] = None,
                 same_doc_domains: Sequence[str] = (), weights: Optional[Mapping[str, Any]] = None,
-                ) -> Tuple[DocFacts, List[Evidence]]:
-    """Факты (с типом документа) и улики для проверенного PDF. Исключений не бросает."""
-    doc = read_document(path)
+                progress: Optional[Callable[[int], None]] = None) -> Tuple[DocFacts, List[Evidence]]:
+    """Факты (с типом документа) и улики для проверенного PDF. Исключений не бросает.
+    `progress(n)` — перед распознаванием скана: сколько страниц будет прочитано."""
+    doc = read_document(path, progress=progress)
     facts = facts_from_text(doc, [ctx.part, base_part(ctx.part)])
     facts.doc_type = doc_types.classify(doc, facts)
     return facts, collect(facts, ctx, url, trust, same_doc_domains, weights, doc)

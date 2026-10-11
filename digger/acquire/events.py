@@ -46,6 +46,7 @@ KEYS = {
     "quarantine.placed": "ok", "manual.start": "",
     "validate.ok": "ok", "validate.scan": "ok", "validate.not_pdf": "fail", "validate.encrypted": "fail",
     "validate.active_content": "fail", "validate.too_big": "fail", "validate.damaged": "fail",
+    "scan.ocr": "",
     "verify.result": "ok", "verify.rejected": "fail",
     "confirm.search": "", "confirm.identical": "ok", "confirm.none": "empty",
     "access.site_protected": "fail", "access.network_blocked": "fail", "access.not_whitelisted": "skip",

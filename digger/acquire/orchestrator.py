@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 from ..core.config import resolve_path
 from ..core.netsafe import NetBlocked, SafeHttp, host_of
 from . import confirm as confirm_mod
+from . import scanocr
 from .conclusion import Conclusion, build_conclusion
 from .crawl import crawl
 from .decide import decide
@@ -367,8 +368,9 @@ class Orchestrator:
             rec.verdict = decide([], validation)
         else:
             rec.facts, evidence = verify_file(path, ctx, url=rec.fetch.final_url or lead.url, trust=self.trust,
-                                              weights=self.weights)
-            rec.verdict = decide(evidence, validation, self.thresholds)
+                                              weights=self.weights,
+                                              progress=lambda n: self._emit("scan.ocr", pages=n, **kw))
+            rec.verdict = decide(evidence, validation, self.thresholds, ocr=bool(rec.facts.ocr_pages))
             self._report(rec, kw)
             if rec.verdict.status == "confirmed":
                 found = confirm_mod.confirm(rec, [_raw(r) for r in res.records], self.trust, self.owners)
@@ -427,6 +429,7 @@ def from_context(ctx: Any, bus: Optional[EventBus] = None, http: Any = None, db:
     from .stats import SearchStats, StatsRecorder
     cfg = ctx.config
     acq = cfg.get("acquire", {})
+    scanocr.configure(cfg, ctx.app_dir)
     bus = bus if bus is not None else EventBus()
     registry = Registry.load(os.path.join(ctx.app_dir, "data", "sources.json"), keys=acq.get("api_keys"), bus=bus)
     if http is None:

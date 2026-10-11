@@ -51,6 +51,7 @@
   "validate.active_content": "文件检查：含有活动内容（{what}），已拒绝",
   "validate.too_big": "文件检查：文件过大（{size:size}），已拒绝",
 
+  "scan.ocr": "扫描件无文本：正在识别 {pages} 页",
   "verify.result": "内容核对：型号 {part_ok} 封装 {package} {package_ok} 厂商 {maker} {maker_ok} — {score} 分",
   "verify.rejected": "内容核对：不是 {part} 的文档 — {score} 分",
 

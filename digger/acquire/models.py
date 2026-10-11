@@ -110,6 +110,7 @@ class DocFacts(Model):
     language: str = ""
     doc_type: str = ""        # datasheet / family / app_note / errata... (acquire/classify.py)
     text_fingerprint: str = ""  # simhash текста, шестнадцатеричная строка
+    ocr_pages: List[int] = field(default_factory=list)   # страницы скана, прочитанные распознаванием
 
     def __post_init__(self) -> None:
         self.parts_found = {str(part): sorted({int(p) for p in pages})

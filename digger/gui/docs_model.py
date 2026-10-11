@@ -30,6 +30,7 @@ DOC_TYPES = {"datasheet": u"datasheet", "family": u"datasheet на семейс�
 REASONS = {"low_score": u"баллов меньше порога «вероятно»", "no_part_match": u"партномера в документе нет",
            "other_part_in_heading": u"в заголовке другой партномер", "manufacturer_conflict": u"производитель не совпал",
            "package_conflict": u"корпус не совпал", "no_text_layer": u"это скан — текст не прочитать, нужен ваш взгляд",
+           "ocr_text": u"это скан — текст распознан с картинок страниц, возможны ошибки чтения",
            "unconfirmed": u"нет подтверждения: ни сайта производителя, ни двух независимых сайтов с тем же файлом",
            "user_confirmed": u"подтверждён вами", "user_rejected": u"отклонён вами",
            "hard:not_pdf": u"файл не PDF", "hard:too_big": u"файл слишком большой", "hard:damaged": u"файл повреждён",

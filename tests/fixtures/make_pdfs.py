@@ -154,6 +154,43 @@ def scan():
     return make_pdf([[], [], []], title="AT24C02 scan", producer="ScanSoft 2.0")
 
 
+def scan_pdf(pages, title="", size=(1654, 2339), rotate=0):
+    """Скан с картинками страниц (A4, 200 dpi): страница — список строк, строка — текст или (текст, кегль в точках
+    картинки). Текстового слоя нет. `rotate` — страницы лежат в файле повёрнутыми, поворот записан в /Rotate."""
+    from PIL import Image, ImageDraw, ImageFont
+    from pypdf import PdfReader
+    images = []
+    for lines in pages:
+        image = Image.new("L", size, 255)
+        draw, y = ImageDraw.Draw(image), 120
+        for line in lines:
+            text, pt = line if isinstance(line, tuple) else (line, 34)
+            draw.text((120, y), text, font=ImageFont.load_default(size=pt), fill=0)
+            y += int(pt * 1.6)
+        images.append(image.rotate(rotate, expand=True) if rotate else image)
+    buf = io.BytesIO()
+    images[0].save(buf, "PDF", resolution=200, save_all=True, append_images=images[1:])
+    w = PdfWriter(clone_from=PdfReader(io.BytesIO(buf.getvalue())))
+    for page in w.pages:
+        if rotate:
+            page[N("/Rotate")] = NumberObject(rotate)
+    w.add_metadata({"/Producer": "ScanSoft 2.0", "/Title": title})
+    out = io.BytesIO()
+    w.write(out)
+    return out.getvalue()
+
+
+def scan_image():
+    """Скан datasheet на NE555: страницы — картинки; последняя страница пустая (белый лист)."""
+    return scan_pdf([
+        [("NE555 Precision Timer", 70), "Texas Instruments", "Datasheet SLFS022 revised 2014", "",
+         "Timing from microseconds to hours, astable or monostable operation",
+         "Available in 8-pin PDIP, SOIC-8 and TSSOP-8 packages"],
+        ["NE555", "Ordering Information", "NE555P PDIP-8", "NE555DR SOIC-8", "", "Texas Instruments Incorporated"],
+        [],
+    ], title="scan0001")
+
+
 def chinese():
     """Китайский datasheet: текст на китайском, партномера и корпуса латиницей."""
     return make_pdf([
@@ -213,13 +250,14 @@ def unrelated():
 DOCS = {"datasheet": datasheet, "family": family, "app_note": app_note, "catalog": catalog, "foreign": foreign,
         "scan": scan, "chinese": chinese, "errata": errata, "reference_manual": reference_manual,
         "product_brief": product_brief, "distributor": distributor, "unrelated": unrelated}
+SCANS = {"scan_image": scan_image}                # сканы с картинками страниц: читаются только распознаванием
 
 
 def write(name, folder):
     """Записывает документ `name` в папку и возвращает путь."""
     path = os.path.join(str(folder), name + ".pdf")
     with open(path, "wb") as f:
-        f.write(DOCS[name]())
+        f.write((DOCS.get(name) or SCANS[name])())
     return path
 
 

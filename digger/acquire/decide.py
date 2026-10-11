@@ -5,7 +5,9 @@
 Пороги — `config.json → acquire.thresholds`. Причины — короткие ключи (текст для пользователя — дело окна):
 
 - `hard:<причина>` — жёсткий отказ проверки файла (не PDF, активное содержимое…): сразу `rejected`;
-- `no_text_layer` — скан (E12): итог не выше `needs_user`;
+- `no_text_layer` — скан, который не удалось прочитать (E12): итог не выше `needs_user`;
+- `ocr_text` — текст скана распознан с картинок страниц (шаг 9.2): баллы считаются как обычно, пометка — для
+  пользователя (распознанный текст беднее напечатанного);
 - `manufacturer_conflict`, `package_conflict` — фото противоречит документу (E6, E7 с минусом); если документ
   при этом о нашем партномере (E1 или E3) — `needs_user`: противоречие показывается, а не прячется;
 - `no_part_match` — нет ни E1, ни E3: выше `probable` не подняться;
@@ -23,7 +25,7 @@ _CONFLICTS = (("E6", "manufacturer_conflict"), ("E7", "package_conflict"))
 
 
 def decide(evidence: Sequence[Evidence], validation: Optional[ValidationResult] = None,
-           thresholds: Optional[Mapping[str, Any]] = None) -> Verdict:
+           thresholds: Optional[Mapping[str, Any]] = None, ocr: bool = False) -> Verdict:
     limits = dict(DEFAULT_THRESHOLDS, **dict(thresholds or {}))
     evidence = list(evidence)
     if validation is not None and not validation.ok:
@@ -36,6 +38,8 @@ def decide(evidence: Sequence[Evidence], validation: Optional[ValidationResult] 
         return Verdict(status="needs_user", score=score, evidence=evidence, reasons=["no_text_layer"])
     ours = "E1" in points or "E3" in points
     reasons: List[str] = [] if ours else ["no_part_match"]
+    if ocr:
+        reasons.append("ocr_text")
     if "E11" in points:
         reasons.append("other_part_in_heading")
     conflicts = [reason for code, reason in _CONFLICTS if points.get(code, 0) < 0]
