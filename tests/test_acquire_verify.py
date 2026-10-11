@@ -203,3 +203,12 @@ def test_guessed_maker_matches_but_never_conflicts():
     assert codes(V.collect(own, guessed))["E6"] == 10
     assert "E6" not in codes(V.collect(other, guessed))
     assert codes(V.collect(other, ctx("STM32F103C8T6", "STMicroelectronics")))["E6"] == -15
+
+
+def test_part_in_file_name_title():
+    """Заголовок в метаданных — имя файла: «0a-esp8266ex_datasheet_en» называет ESP8266EX (документ Espressif)."""
+    facts = DocFacts(pages=31, has_text=True, heading="NOT RECOMMENDED FOR NEW DESIGNS",
+                     title="0a-esp8266ex_datasheet_en", parts_found={"ESP8266EX": [1]}, doc_type="datasheet")
+    assert codes(V.collect(facts, ctx("ESP8266EX")))["E4"] == 10
+    other = DocFacts(pages=9, has_text=True, title="cat24c021_datasheet", parts_found={"AT24C02": [3]})
+    assert "E4" not in codes(V.collect(other, ctx("AT24C02")))

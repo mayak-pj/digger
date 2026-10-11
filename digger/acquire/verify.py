@@ -180,9 +180,11 @@ def _names_in(text: str, names: Sequence[str], prefix: int = 3) -> bool:
     """Есть ли в тексте одно из имён отдельным словом; суффикс допустим (NE555P), другая цифра — нет (LM3580).
     Перед именем допустим префикс производителя: маркировка на корпусе бывает усечённой (25Q64JV — это W25Q64JV).
     Для имени семейства префикс не допускается (`prefix=0`): «AT24» внутри «CAT24C021» — чужой чип."""
-    squeezed = re.sub(r"[^A-Z0-9\s]", "", text.upper())
+    upper = text.upper()
+    # Имя файла в метаданных: «0a-esp8266ex_datasheet_en» — дефис и подчёркивание там разделяют слова.
+    variants = (re.sub(r"[^A-Z0-9\s]", "", upper), re.sub(r"[^A-Z0-9\s]", "", re.sub(r"[-_]", " ", upper)))
     return any(re.search(r"(?<![A-Z0-9])[A-Z]{0,%d}%s(?!\d)" % (prefix, re.escape(n)), squeezed)
-               for n in names if len(n) >= 4)
+               for n in names if len(n) >= 4 for squeezed in variants)
 
 
 def _canon_maker(name: str) -> str:
