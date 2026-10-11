@@ -34,6 +34,8 @@ def photo_dir(tmp_path):
     for i in range(1, PHOTOS):
         (d / ("chip_%03d.png" % i)).write_bytes(data)
     (d / u"заметки.txt").write_text(u"не фото", encoding="utf-8")
+    (d / "._chip_000.png").write_bytes(b"\x00\x05\x16\x07Mac OS X")      # спутник файла с флешки из macOS
+    (d / ".hidden.png").write_bytes(data)
     return str(d)
 
 
@@ -46,6 +48,8 @@ def test_scan_images_folders_files_and_unreachable(photo_dir, tmp_path):
                                  str(tmp_path / u"нет такой папки" / "x.png")])
     assert len(found) == PHOTOS + 1 and found[0].endswith("chip_000.png") and found[-1] == os.path.normpath(single)
     assert len(errors) == 1 and u"нет такой папки" in errors[0]
+    assert not [p for p in found if os.path.basename(p).startswith(".")]      # служебные файлы macOS — не фото
+    assert scan_images([os.path.join(photo_dir, "._chip_000.png")]) == ([], [])
     stop = type("Cancel", (), {"cancelled": True})()
     assert scan_images([photo_dir], stop) == ([], [])
 

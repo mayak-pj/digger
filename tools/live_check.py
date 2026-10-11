@@ -171,7 +171,8 @@ def find_images(folder: str) -> List[str]:
     out = []
     for d, dirs, files in os.walk(folder):
         dirs[:] = [x for x in dirs if not x.startswith(".")]
-        out += [os.path.join(d, f) for f in sorted(files) if os.path.splitext(f)[1].lower() in PHOTO_EXT]
+        out += [os.path.join(d, f) for f in sorted(files)                # `._фото.JPG` — спутники с флешки из macOS
+                if not f.startswith(".") and os.path.splitext(f)[1].lower() in PHOTO_EXT]
     return out
 
 

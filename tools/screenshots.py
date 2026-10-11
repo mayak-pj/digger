@@ -50,8 +50,9 @@ def sample_photos():
     if PHOTOS_DIR and os.path.isdir(PHOTOS_DIR):
         found = []
         for d, dirs, files in os.walk(PHOTOS_DIR):
-            dirs.sort()
-            found += [os.path.join(d, f) for f in sorted(files) if f.lower().endswith(PHOTO_EXT)]
+            dirs[:] = sorted(x for x in dirs if not x.startswith("."))
+            found += [os.path.join(d, f) for f in sorted(files)         # `._фото.JPG` — спутники с флешки из macOS
+                      if not f.startswith(".") and f.lower().endswith(PHOTO_EXT)]
         if found:
             return found[:MAX_PHOTOS]
     d = os.path.join(ROOT, "tests", "samples")
@@ -92,6 +93,19 @@ def save(widget, path: str) -> None:
     with open(path, "wb") as f:               # путь с русскими буквами: пишем сами, не через Qt
         f.write(bytes(buf.data()))
     print(path)
+
+
+def analyze_first(w, photos) -> str:
+    """Распознать первое фото, которое читается: испорченный файл не срывает снимки. Возвращает его путь."""
+    for path in photos:
+        try:
+            r, variants = w.pipe.analyze_image(path)
+        except Exception as e:      # noqa — нечитаемая картинка, сбой распознавания
+            print("фото пропущено: %s (%s: %s)" % (path, type(e).__name__, e))
+            continue
+        w._analyzed((path, r, variants))
+        return path
+    return ""
 
 
 def wait_idle(app, w, timeout: float = 30.0) -> None:
@@ -142,8 +156,7 @@ def shoot(app, theme: str, out_dir: str, prefix: str, ocr: bool) -> None:
         w.add_files(photos)
         wait_idle(app, w)                                       # фото и миниатюры читаются в фоне
         if ocr and photos and w.ctx.modules["ocr"].is_available():
-            r, variants = w.pipe.analyze_image(photos[0])       # здесь можно в потоке окна: экрана нет
-            w._analyzed((photos[0], r, variants))
+            analyze_first(w, photos)                            # здесь можно в потоке окна: экрана нет
         wait_idle(app, w)
 
         def name(part):

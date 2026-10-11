@@ -32,6 +32,11 @@ THUMB_CACHE = 4000        # столько миниатюр помним, счи
 
 # ---------- диск: только из фоновых потоков ----------
 
+def is_photo_name(name: str) -> bool:
+    """Имя файла-картинки. Файлы с точкой в начале (`._фото.JPG` — спутники с флешки из macOS) — не фото."""
+    return not name.startswith(".") and name.lower().endswith(IMG_EXT)
+
+
 def scan_images(paths: Iterable[str], cancel: Any = None) -> Tuple[List[str], List[str]]:
     """Файлы-картинки из списка файлов и папок: (найденные пути, недоступные пути)."""
     found: List[str] = []
@@ -42,8 +47,8 @@ def scan_images(paths: Iterable[str], cancel: Any = None) -> Tuple[List[str], Li
         try:
             if os.path.isdir(p):
                 found += [os.path.normpath(os.path.join(p, fn)) for fn in sorted(os.listdir(p))
-                          if fn.lower().endswith(IMG_EXT)]
-            elif p.lower().endswith(IMG_EXT):
+                          if is_photo_name(fn)]
+            elif is_photo_name(os.path.basename(p)):
                 if os.path.isfile(p):
                     found.append(os.path.normpath(p))
                 else:

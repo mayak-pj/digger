@@ -81,3 +81,11 @@ def test_live_check_in_pack_and_build():
 def test_chips_match_trial():
     from digger.acquire import trial
     assert live_check.CHIPS == trial.CHIPS
+
+
+def test_find_images_skips_dot_files(tmp_path):
+    d = tmp_path / u"фото" / "ocr"
+    d.mkdir(parents=True)
+    for name in ("25Q64FV.JPG", "._25Q64FV.JPG", ".DS_Store", "7972.jpg", u"заметки.txt"):
+        (d / name).write_bytes(b"x")
+    assert [os.path.basename(p) for p in live_check.find_images(str(tmp_path))] == ["25Q64FV.JPG", "7972.jpg"]

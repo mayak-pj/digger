@@ -259,3 +259,35 @@ def test_notes_file_goes_into_report(tmp_path):
     (app / "впечатления.txt").write_text("окно ок", encoding="utf-8")
     z = rc.build_report(str(app), str(out), [], [], str(tmp_path))
     assert "впечатления.txt" in zipfile.ZipFile(z).namelist()
+
+
+def test_screenshots_skip_dot_files_and_broken_photo(tmp_path, monkeypatch):
+    """Выезд 2026-10-10: `._25Q64FV.JPG` с флешки из macOS сорвал все снимки."""
+    tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
+    sys.path.insert(0, tools if os.path.isdir(tools) else os.path.dirname(PACK))
+    shots = pytest.importorskip("screenshots")
+    d = tmp_path / u"фото" / "ocr"
+    d.mkdir(parents=True)
+    (tmp_path / u"фото" / ".Spotlight-V100").mkdir()
+    (tmp_path / u"фото" / ".Spotlight-V100" / "x.jpg").write_bytes(b"x")
+    for name in ("._25Q64FV.JPG", "25Q64FV.JPG", "7972.jpg"):
+        (d / name).write_bytes(b"x")
+    monkeypatch.setattr(shots, "PHOTOS_DIR", str(tmp_path / u"фото"))
+    photos = shots.sample_photos()
+    assert [os.path.basename(p) for p in photos] == ["25Q64FV.JPG", "7972.jpg"]
+
+    class Pipe:
+        def analyze_image(self, path):
+            if path.endswith("25Q64FV.JPG"):
+                raise ValueError(u"Не удалось открыть изображение")
+            return "report", ["variant"]
+
+    class Window:
+        pipe, got = Pipe(), []
+
+        def _analyzed(self, res):
+            self.got.append(res)
+
+    w = Window()
+    assert shots.analyze_first(w, photos) == photos[1] and w.got == [(photos[1], "report", ["variant"])]
+    assert shots.analyze_first(w, photos[:1]) == ""
