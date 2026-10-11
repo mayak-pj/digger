@@ -38,10 +38,10 @@ PREVIEW_CACHE = 16
 
 CARD_HEIGHT = 330             # высота карточки чипа при запуске; границу можно двигать
 REPORT_MIN_HEIGHT = 170       # столько заключения о памяти видно всегда, даже под таблицей сайтов
-WEB_TIP = ("Сначала локальная база, потом интернет: каталоги, сайты производителей, поисковики —\n"
-           "до первого подтверждённого datasheet")
-WEB_ALL_TIP = ("Интернет: пройти все источники, не останавливаясь на первом найденном документе\n"
-               "(дольше; когда обычный поиск ничего не подтвердил)")
+WEB_TIP = ("Быстрый поиск datasheet: сначала локальная база, потом интернет (каталоги, сайты производителей,\n"
+           "поисковики) — до первого подтверждённого документа")
+WEB_ALL_TIP = ("Полный поиск datasheet в интернете: все источники, без остановки на первом найденном документе —\n"
+               "дольше; чтобы сравнить варианты или поискать заново, когда документ уже есть в базе")
 
 class MainWindow(QMainWindow):
     ext_failed = pyqtSignal(str)      # расширение отключилось (может прийти из фонового потока)
@@ -98,8 +98,8 @@ class MainWindow(QMainWindow):
             return a
         act("Добавить фото…", "image-plus", self.add_files_dialog)
         self.a_run = act("Распознать", "scan-text", self.run_selected, "Распознать выбранные (или все новые) фото")
-        self.a_web = act("Искать в интернете", "search", lambda: self.web_search(None), WEB_TIP)
-        self.a_web_all = act("Искать на всех сайтах", "globe", lambda: self.web_search(["all"]), WEB_ALL_TIP)
+        self.a_web = act("Быстрый поиск", "search", lambda: self.web_search(None), WEB_TIP)
+        self.a_web_all = act("Полный поиск", "globe", lambda: self.web_search(["all"]), WEB_ALL_TIP)
         self.a_stop = act("Стоп", "square", self.stop_job)
         tb.addSeparator()
         act("Сохранить отчёт", "file-text", self.save_report)
@@ -790,7 +790,7 @@ class MainWindow(QMainWindow):
     def allow_site(self, note):
         from ..acquire.site_actions import allow_domain
         added = allow_domain(self.ctx.modules["web_search"].http, self.app_dir, note.site)
-        self.log("Домен «%s» разрешён; искать заново — кнопкой «Искать…»" % note.site if added
+        self.log("Домен «%s» разрешён; искать заново — кнопкой «Быстрый поиск»" % note.site if added
                  else "Домен «%s» уже разрешён" % note.site)
 
     def _report_colors(self):

@@ -169,7 +169,8 @@ def test_one_settings_one_stop_and_search_buttons_in_card(window, tmp_path, monk
     menu = [a.text() for top in w.menuBar().actions() for a in ([top] + (top.menu().actions() if top.menu() else []))]
     assert texts.count(u"Настройки") == 1 and not [t for t in menu if t.startswith(u"Настройки")]
     assert texts.count(u"Стоп") == 1 and w.search_feed.b_stop.isHidden()
-    assert u"Искать везде" not in texts and u"Искать на всех сайтах" in texts
+    assert u"Искать везде" not in texts and u"Быстрый поиск" in texts and u"Полный поиск" in texts
+    assert (w.card.b_web.text(), w.card.b_web_all.text()) == (u"Быстрый", u"Полный")
     assert u"локальная база" in w.a_web.toolTip() and w.card.b_web.toolTip() == w.a_web.toolTip()
 
     a, b = [os.path.normpath(_png(str(tmp_path / ("n%d.png" % i)))) for i in range(2)]

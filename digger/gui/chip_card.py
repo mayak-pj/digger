@@ -216,15 +216,15 @@ class ChipCard(QFrame):
         self.b_apply = QPushButton(u"Применить")
         self.b_apply.setToolTip(u"Сверить с datasheet заново с этим корпусом и числом выводов")
         form.addRow(u"Корпус:", row(self.pkg_box, self.pins, self.b_apply))
-        self.b_web = QPushButton(theme.icon("search"), u"В интернете")
-        self.b_web_all = QPushButton(theme.icon("globe"), u"Все сайты")
+        self.b_web = QPushButton(theme.icon("search"), u"Быстрый")
+        self.b_web_all = QPushButton(theme.icon("globe"), u"Полный")
         self.b_next = QPushButton(theme.icon("skip-forward"), u"Далее")
         self.b_next.setToolTip(u"Перейти к следующему фото в списке")
         search = QHBoxLayout()           # кнопки равной ширины: подписи не обрезаются в узкой колонке
         search.setSpacing(t["space_sm"])
         for b in (self.b_web, self.b_web_all, self.b_next):
             search.addWidget(b, 1)
-        form.addRow(u"Искать:", search)
+        form.addRow(u"Поиск:", search)
         col.addLayout(form)
         col.addStretch(1)
         body.addWidget(self.fields, 2)
