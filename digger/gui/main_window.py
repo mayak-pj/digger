@@ -18,6 +18,8 @@ from PyQt5.QtWidgets import (QAbstractItemView, QAction, QApplication, QDockWidg
 
 from ..acquire.events import Event
 from ..acquire.store import AcquireStore
+from .. import __version__
+from ..core import updater
 from ..core.config import resolve_path
 from ..core.pipeline import ChipPipeline, create_context
 from ..core.utils import safe_filename
@@ -134,6 +136,7 @@ class MainWindow(QMainWindow):
         m.addAction("Инструкция (README)", lambda: self._open_path(os.path.join(self.app_dir, "README.md")))
         m.addAction("Как показать программу", lambda: self._open_path(demo_guide_path(self.app_dir)))
         m.addAction("Модули", self.show_modules)
+        m.addAction("Проверить обновление…", self.check_update)
         self.menus = {a.text(): a.menu() for a in mb.actions() if a.menu()}
 
         split = QSplitter(Qt.Horizontal)
@@ -337,6 +340,8 @@ class MainWindow(QMainWindow):
                 self.log("⚠ " + getattr(ocr, "error", "OCR недоступен"))
                 QMessageBox.warning(self, "Распознавание недоступно", getattr(ocr, "error", "") +
                                     "\n\nМаркировку можно вводить вручную. Путь к Tesseract задаётся в «Настройках».")
+            if self.ctx.config.get("update", {}).get("check_on_start", True):
+                self.check_update(quiet=True)
             st = self.ctx.modules["local_db"].stats()
             self.log("База: %(files)d файлов (скачано %(library)d), каталог деталей: %(catalog)d" % st)
             if st["files"] == 0 and self.ctx.config["paths"].get("scan_roots"):
@@ -1120,6 +1125,43 @@ class MainWindow(QMainWindow):
         if self.ext and ExtensionsDialog(self.ext, self).exec_():
             self._load_extensions()
             self.log("Расширения: изменения применены")
+
+    def check_update(self, quiet=False):
+        """Сверка версии с общей папкой (`update.share_dir`) — в фоне; quiet — при запуске, молча, если нового нет."""
+        share = self.ctx.config.get("update", {}).get("share_dir", "")
+        if not share:
+            if not quiet:
+                QMessageBox.information(self, "Обновление", "Общая папка обновлений не задана: укажите "
+                                        "\"update\": {\"share_dir\": \"\\\\\\\\сервер\\\\папка\"} в config.json.")
+            return
+        self._bg(lambda progress, cancel: updater.check(share, __version__),
+                 lambda r: self._update_checked(r, share, quiet))
+
+    def _update_checked(self, r, share, quiet):
+        state, m = r["state"], r["manifest"]
+        if state == "new":
+            ask = QMessageBox.question(self, "Обновление", "Доступна версия %s (у вас %s).\n\nСкачать и установить? "
+                                       "Программа закроется и запустится заново; настройки, библиотека и база "
+                                       "сохранятся." % (m["version"], __version__))
+            if ask == QMessageBox.Yes:
+                updates = os.path.join(self.app_dir, "updates")
+                self.start_job(lambda progress, cancel: updater.download(share, m, updates), self._update_staged)
+        elif not quiet:
+            text = {"current": "Установлена последняя версия (%s)." % __version__, "off": "Обновления не настроены.",
+                    "unreachable": "Общая папка недоступна: %s" % r["error"], "broken": r["error"]}[state]
+            QMessageBox.information(self, "Обновление", text)
+        elif state != "current":
+            self.log("Обновление: " + (r["error"] or state))
+
+    def _update_staged(self, staged):
+        if os.name != "nt":                  # замену файлов делает .bat — только Windows
+            QMessageBox.information(self, "Обновление", "Новая версия скачана и проверена: %s\n"
+                                    "Автоматическая замена работает только в Windows." % staged)
+            return
+        import subprocess
+        bat = updater.write_apply_script(self.app_dir, staged, os.getpid())
+        subprocess.Popen(["cmd.exe", "/c", bat], creationflags=0x00000010)      # CREATE_NEW_CONSOLE
+        self.close()
 
     def show_modules(self):
         lines = ["%-11s %s" % (k, v) for k, v in self.ctx.config["modules"].items()]

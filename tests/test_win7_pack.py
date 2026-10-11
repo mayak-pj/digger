@@ -354,3 +354,10 @@ def test_screenshots_skip_dot_files_and_broken_photo(tmp_path, monkeypatch):
     w = Window()
     assert shots.analyze_first(w, photos) == photos[1] and w.got == [(photos[1], "report", ["variant"])]
     assert shots.analyze_first(w, photos[:1]) == ""
+
+
+def test_update_check_skips_off_windows_and_is_ordered(tmp_path):
+    import update
+    assert "update" in rc.ORDER and "update" in rc.ABOUT_MINUTES
+    if os.name != "nt":
+        assert update.run(rc.Context(str(tmp_path), str(tmp_path)))["status"] == "skip"

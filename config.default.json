@@ -85,6 +85,8 @@
                  "total_seconds": 60}
   },
 
+  "update": {"share_dir": "", "check_on_start": true},
+
   "ui": {"theme": "light", "follow_recognition": true},
 
   "extensions": {"enabled": [], "disabled": [], "settings": {}}

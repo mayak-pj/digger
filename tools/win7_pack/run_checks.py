@@ -19,12 +19,12 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # остальные проверки — по алфавиту после этих
-ORDER = ["sysinfo", "selftest", "window", "ppocr_check", "program_ocr", "sites", "adapters", "downloads", "screens", "live"]
+ORDER = ["sysinfo", "selftest", "window", "ppocr_check", "program_ocr", "sites", "adapters", "downloads", "update", "screens", "live"]
 SKIP_FILES = {"run_checks", "live_check"}
 MAX_LOG = 5 * 1024 * 1024
 TODO_FILE = "ЧТО СДЕЛАТЬ.txt"
 # сколько обычно идёт проверка, минут (по отчёту выезда 3: 120 фото, 12 эталонных чипов) — подсказка в окне
-ABOUT_MINUTES = {"selftest": 10, "ppocr_check": 50, "program_ocr": 15, "sites": 3, "adapters": 5, "downloads": 30,
+ABOUT_MINUTES = {"selftest": 10, "ppocr_check": 50, "program_ocr": 15, "sites": 3, "adapters": 5, "downloads": 30, "update": 1,
                  "screens": 3, "live": 45}
 NOTES_FILE = "впечатления.txt"      # пользователь пишет впечатления от окна; файл попадает в отчёт
 
