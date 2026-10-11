@@ -20,7 +20,10 @@ from digger.recognition.manager import ProviderInfo, RecognitionManager
 HAS_PPOCR = all(importlib.util.find_spec(m) for m in ("onnxruntime", "rapidocr_onnxruntime"))
 needs_ppocr = pytest.mark.skipif(not HAS_PPOCR, reason="не установлен rapidocr-onnxruntime")
 SAMPLES = {"at24c02.png": "24C02", "stm32.png": "STM32F103", "w25q64_rot.png": "W25Q64", "lm358_180.png": "LM358"}
-MIN_MYTEST_PCT = 36.0   # таблица шага 0.7: ppocr_main auto 38.3 % на 120 вырезках
+# шаг 0.11: на 120 вырезках Win7 (отчёт 2026-10-10) и Mac дают одно и то же — 46 строк совпало с ответом
+# (38.3 %), в 61 строке ответ содержится (50.8 %: «25Q128FVPG» при ответе «25Q128FV»); пороги — с запасом в 2–3 фото
+MIN_MYTEST_PCT = 36.0
+MIN_MYTEST_INSIDE_PCT = 48.0
 
 
 def _provider(pid, text="", available=True, fail=False, original=False, cloud=False, lines=None, conf=90.0):
@@ -214,6 +217,31 @@ def test_nobody_confident_keeps_first_reading(ctx, monkeypatch):
     assert m.recognize(VARIANTS).provider == "exb"          # оба слабые, но второй подтверждён справочником
 
 
+def test_short_confident_noise_does_not_replace_longer_reading(ctx, monkeypatch):
+    """Отчёт с Win7 от 2026-10-10: первый способ прочитал четыре строки с уверенностью чуть ниже
+    порога, второй — три знака мусора чуть выше порога. Остаётся прочитанное первым: у него прочитано больше."""
+    feed = _feed(ctx)
+    first = ["BE33E", "CHOH", "QZXB", "5861"]
+    m = _manager(ctx, monkeypatch, exa=_provider("exa", "\n".join(first), lines=first, conf=57.0),
+                 exb=_provider("exb", "44H", conf=61.0))
+    res = m.recognize(VARIANTS)
+    assert (res.provider, res.best_text.splitlines()) == ("exa", first)
+    assert [(a.provider, a.status) for a in res.attempts] == [("exa", "weak"), ("exb", "ok")]
+    assert [l.text for l in res.lines] == first + ["44H"]
+    assert feed[-1] == u"EXB прочитал меньше — оставлено прочитанное способом EXA"
+
+
+def test_later_reading_wins_when_it_reads_more_or_is_confirmed(ctx, monkeypatch):
+    m = _manager(ctx, monkeypatch, exa=_provider("exa", "7)", conf=59.0), exb=_provider("exb", "QZX7719KW", conf=61.0))
+    assert m.recognize(VARIANTS).provider == "exb"          # второй прочитал больше
+    first = ["BE33E", "CHOH", "QZXB", "5861"]
+    m = _manager(ctx, monkeypatch, exa=_provider("exa", "\n".join(first), lines=first, conf=57.0),
+                 exb=_provider("exb", "LM358", conf=61.0))
+    assert m.recognize(VARIANTS).provider == "exb"          # второй подтверждён справочником
+    m = _manager(ctx, monkeypatch, exa=_provider("exa", "LM358", conf=40.0), exb=_provider("exb", "QZX7719KW1234"))
+    assert m.recognize(VARIANTS).provider == "exa"          # первый слаб, но подтверждён справочником, второй — нет
+
+
 def test_auto_rules_can_be_switched_off(ctx, monkeypatch):
     m = _manager(ctx, monkeypatch, exa=_provider("exa", "QZX7719KW", conf=20.0), exb=_provider("exb", "LM358"))
     m.min_confidence, m.require_confirmed = 0.0, False
@@ -336,6 +364,7 @@ def test_mytest_ocr_share(ctx, my_test_dir):
     print("\nmy_test/ocr: %d фото, строка совпала — %.1f %%, строка содержит ответ — %.1f %%"
           % (len(items), pct, 100.0 * inside / len(items)))
     assert pct >= MIN_MYTEST_PCT
+    assert 100.0 * inside / len(items) >= MIN_MYTEST_INSIDE_PCT
 
 
 def test_window_asks_consent_from_background_thread(ctx, monkeypatch):

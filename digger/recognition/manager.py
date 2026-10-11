@@ -5,6 +5,8 @@
 упал, ничего не прочитал, прочитал с уверенностью ниже порога или (если включено `require_confirmed`)
 ни один кандидат партномера из прочитанного не подтвердился справочником, каталогом или локальной
 базой (`recognition.auto`).
+Справившийся не вытесняет способ, стоящий в цепочке раньше, если сам не подтверждён справочником, а тот
+подтверждён или прочитал больше (уверенность × число букв и цифр — та же мера, что при выборе поворота).
 Способ (`mode`): «Авто» — цепочка; id провайдера — только он (и не из цепочки тоже); «Сравнить все» —
 все доступные провайдеры по очереди, в `OcrResult.attempts` — что прочитал каждый.
 Облачный провайдер вызывается только если облако включено в настройках и пользователь согласился
@@ -46,10 +48,19 @@ def _alnum(s: str) -> int:
     return len(re.findall(r"[A-Za-z0-9]", s))
 
 
+def _chosen_lines(res: OcrResult) -> list:
+    chosen = {t.strip() for t in res.best_text.splitlines() if t.strip()}
+    return [l for l in res.lines if l.text.strip() in chosen] or res.lines
+
+
+def result_evidence(res: OcrResult) -> float:
+    """Сколько прочитано: сумма «уверенность × число букв и цифр» по строкам итоговой маркировки."""
+    return sum(l.confidence * _alnum(l.text) for l in _chosen_lines(res))
+
+
 def result_confidence(res: OcrResult) -> float:
     """Средняя уверенность строк итоговой маркировки (вес — число букв и цифр), 0..100."""
-    chosen = {t.strip() for t in res.best_text.splitlines() if t.strip()}
-    lines = [l for l in res.lines if l.text.strip() in chosen] or res.lines
+    lines = _chosen_lines(res)
     weight = sum(max(1, _alnum(l.text)) for l in lines)
     return round(sum(l.confidence * max(1, _alnum(l.text)) for l in lines) / weight, 1) if weight else 0.0
 
@@ -330,9 +341,27 @@ class RecognitionManager(OCR):
         # справившийся (при сравнении), иначе подтверждённый справочником, иначе первый, кто что-то прочитал
         read = [r for r in done if r.best_text.strip()]
         best = (good or [r for r in read if r.confirmed] or read or done[-1:] or [OcrResult()])[0]
-        if read and not good and len(chain) > 1:
+        kept = self._earlier_better(best, read) if good else None
+        if kept is not None:
+            emit("ocr.kept", best.provider, kept=kept.provider_title)
+            best = kept
+        elif read and not good and len(chain) > 1:
             emit("ocr.fallback", best.provider)
         return self._merge(best, done, attempts, mode)
+
+    @staticmethod
+    def _earlier_better(best: OcrResult, read: List[OcrResult]) -> Optional[OcrResult]:
+        """Способ, стоящий в цепочке раньше справившегося, чьё прочитанное весомее: подтверждено справочником
+        или (когда не подтверждён никто) прочитано больше. Короткий мусор с уверенностью чуть выше порога
+        не должен вытеснять длинную маркировку с уверенностью чуть ниже."""
+        if best.confirmed:
+            return None
+        earlier = read[:read.index(best)]
+        confirmed = [r for r in earlier if r.confirmed]
+        if confirmed:
+            return confirmed[0]
+        heavier = [r for r in earlier if result_evidence(r) > result_evidence(best)]
+        return max(heavier, key=result_evidence) if heavier else None
 
     @staticmethod
     def _merge(result: OcrResult, done: List[OcrResult], attempts: List[OcrAttempt], mode: str = "") -> OcrResult:

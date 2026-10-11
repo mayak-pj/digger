@@ -86,6 +86,7 @@
   "ocr.failed": "{provider} — 错误：{reason}",
   "ocr.unavailable": "{provider} 不可用：{reason}",
   "ocr.no_consent": "{provider}：照片未发送 — 未获得发送许可",
+  "ocr.kept": "{provider} 读取的内容较少 — 保留 {kept} 读取的内容",
   "ocr.fallback": "没有可靠结果 — 采用 {provider} 读取的内容",
   "error.internal": "程序在 {stage} 阶段出错：{error}"
 }

@@ -86,6 +86,7 @@
   "ocr.failed": "{provider} — ошибка: {reason}",
   "ocr.unavailable": "{provider} недоступен: {reason}",
   "ocr.no_consent": "{provider}: фото не отправлено — нет согласия на отправку",
+  "ocr.kept": "{provider} прочитал меньше — оставлено прочитанное способом {kept}",
   "ocr.fallback": "уверенного результата нет — взято прочитанное способом {provider}",
   "error.internal": "ошибка программы на этапе {stage}: {error}"
 }

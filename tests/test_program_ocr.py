@@ -44,6 +44,32 @@ def test_read_photos_reports_provider_and_match(tmp_path):
     assert "Совпало с ответом: 1 из 2" in md and "tesseract — 2" in md and "Проблемы провайдеров" in md
 
 
+def test_match_is_judged_by_final_text_not_spare_lines(tmp_path):
+    """Отчёт от 2026-10-10: «да» стояло рядом с мусором — ответ был только среди запасных строк другого способа."""
+    from digger.core.models import OcrAttempt
+
+    class Ocr(_Ocr):
+        def recognize(self, variants, original=None, progress=None):
+            return OcrResult(lines=[OcrLine("44H", 61.0, "x"), OcrLine("QZXB", 57.0, "x"), OcrLine("25Q64FVSIG", 90.0, "x")],
+                             best_text="44H\n25Q64FVSIG", provider="tesseract",
+                             attempts=[OcrAttempt("ppocr", "PP-OCRv4", status="weak", confidence=57.0, text="QZXB"),
+                                       OcrAttempt("tesseract", "Tesseract", status="ok", confidence=61.0, text="44H")])
+
+    class Prog(object):
+        modules = {"ocr": Ocr(), "enhancer": _Enh()}
+
+    for name in ("QZXB.png", "25Q64FV.png"):
+        shutil.copy2(os.path.join(ROOT, "tests", "samples", "stm32.png"), str(tmp_path / name))
+    by = {r["file"]: r for r in po.read_photos(Prog(), pc.collect(str(tmp_path)), pc)}
+    row = by["QZXB.png"]
+    assert not row["ok"] and row["spare"] and not row["inside"]
+    assert row["attempts"] == [["ppocr", "weak", 57.0, "QZXB"], ["tesseract", "ok", 61.0, "44H"]]
+    assert by["25Q64FV.png"]["inside"] and not by["25Q64FV.png"]["ok"]
+    md = po.report_md(list(by.values()), "")
+    assert "Совпало с ответом: 0 из 2" in md and "Ответ внутри прочитанной строки: 1" in md
+    assert "Ответ только среди запасных строк: 1" in md and "ppocr: weak 57" in md
+
+
 def test_read_photos_isolates_errors(tmp_path):
     (tmp_path / "ABC.png").write_bytes(b"not an image")
     rows = po.read_photos(_Prog(), pc.collect(str(tmp_path)), pc)

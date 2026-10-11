@@ -59,7 +59,7 @@ KEYS = {
     # цепочка распознавания (recognition/manager.py)
     "ocr.start": "", "ocr.next": "", "ocr.ok": "ok", "ocr.weak": "fail", "ocr.unconfirmed": "fail",
     "ocr.empty": "empty", "ocr.failed": "fail", "ocr.unavailable": "skip", "ocr.no_consent": "skip",
-    "ocr.fallback": "ok",
+    "ocr.fallback": "ok", "ocr.kept": "ok",
 }
 # итог поиска и ошибки программы показываются по-русски, на каком бы языке ни шёл поиск
 ALWAYS_RU = ("result.", "search.", "error.", "photo.", "ocr.")

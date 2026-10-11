@@ -86,6 +86,7 @@
   "ocr.failed": "{provider} — error: {reason}",
   "ocr.unavailable": "{provider} unavailable: {reason}",
   "ocr.no_consent": "{provider}: photo not sent — no consent to send",
+  "ocr.kept": "{provider} read less — keeping the text read by {kept}",
   "ocr.fallback": "No confident result — using the text read by {provider}",
   "error.internal": "Program error at stage {stage}: {error}"
 }
