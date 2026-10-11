@@ -105,9 +105,10 @@ def window(tmp_path, monkeypatch):
 
 
 def _wait_job(w, app):
+    """Задача закончилась и её результат дошёл до окна (поток может завершиться раньше доставки done)."""
     for _ in range(1000):
         app.processEvents()
-        if not (w.job and w.job.isRunning()):
+        if w.is_idle() and w.marking.toPlainText():
             break
         time.sleep(0.01)
     app.processEvents()
