@@ -94,6 +94,25 @@ def test_unknown_letter_suffix_is_the_same_part():
     assert codes(V.collect(facts, ctx("STM32F103C8"))) == {}          # C8 — другой кристалл, а не суффикс
 
 
+def test_document_names_the_part_with_package_suffix():
+    """Шаг 8.3h: на фото «AT24C02», документ везде пишет «AT24C02N» — это он же, а не «нет партномера»."""
+    facts = DocFacts(pages=9, has_text=True, parts_found={"AT24C02N": [1, 2], "24C02": [1]}, doc_type="datasheet")
+    assert codes(V.collect(facts, ctx("AT24C02"))) == {"E1": 30, "E5": 15}
+    assert codes(V.collect(facts, ctx("AT24C02D"))) == {"E5": 15}      # на фото другой суффикс — не «точно он»
+    assert codes(V.collect(facts, ctx("AT24C0"))) == {"E5": 15}
+    facts = DocFacts(pages=9, has_text=True, parts_found={"LM3580": [1], "STM32F103C8": [1]})
+    assert codes(V.collect(facts, ctx("LM358"))) == {} and codes(V.collect(facts, ctx("STM32F103"))) == {}
+
+
+def test_family_name_inside_another_part_is_not_a_title_match():
+    """Семейство «AT24» внутри «CAT24C021» — чужой документ: E4 нет, E11 есть."""
+    facts = DocFacts(pages=12, has_text=True, heading="CAT24C161/162(16K), CAT24C021/022(2K)",
+                     parts_found={"CAT24C021": [1]}, family_patterns=["CAT24C021/022"], doc_type="family")
+    assert codes(V.collect(facts, ctx("AT24C02"))) == {"E5": 15, "E11": -30}
+    facts = DocFacts(pages=9, has_text=True, heading="AT24Cxx Serial EEPROM", doc_type="family")
+    assert codes(V.collect(facts, ctx("AT24C02")))["E4"] == 10          # своё семейство в заголовке — по-прежнему E4
+
+
 def test_truncated_marking_is_not_another_part():
     """На корпусе «25Q64JVSIQ», в заголовке «W25Q64JV»: это тот же чип, а не чужой документ."""
     facts = DocFacts(pages=9, has_text=True, heading="W25Q64JV", parts_found={"W25Q64JV": [1]}, doc_type="datasheet")

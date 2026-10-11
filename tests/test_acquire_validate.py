@@ -102,6 +102,66 @@ def test_names_javascript(tmp_path):
     assert res.reason == "active_content" and "JavaScript" in res.active
 
 
+def js_tree(w, *scripts):
+    """/Names → /JavaScript: дерево имён со сценариями (значение `/JS` каждого — как передано)."""
+    names = ArrayObject()
+    for i, js in enumerate(scripts):
+        names.append(TextStringObject("s%d" % i))
+        names.append(w._add_object(js if isinstance(js, DictionaryObject) and "/S" in js else action("/JavaScript", JS=js)))
+    tree = DictionaryObject({N("/Names"): names})
+    w._root_object[N("/Names")] = DictionaryObject({N("/JavaScript"): w._add_object(tree)})
+    return tree
+
+
+def stream(data):
+    st = DecodedStreamObject()
+    st.set_data(data)
+    return st
+
+
+def test_empty_javascript_is_not_active_content(tmp_path):
+    """Шаг 8.3h: datasheet AT24C02D с выезда — в дереве имён один сценарий с пустым текстом. Исполнять нечего."""
+    for n, scripts in enumerate(([TextStringObject("")], [TextStringObject(" \n")], [], None)):
+        w = writer()
+        if scripts is None:
+            js_tree(w, w._add_object(stream(b"")))
+        else:
+            js_tree(w, *scripts)
+        res, ev = check(save(tmp_path, w, "empty%d.pdf.quarantine" % n))
+        assert res.ok and res.active == [] and res.has_text, (n, res.reason, res.active)
+
+
+@pytest.mark.parametrize("case", ["text", "mixed", "stream", "no_js", "bare_string", "extra_key", "not_js_action",
+                                  "open_action", "deep"])
+def test_javascript_that_is_not_provably_empty_is_rejected(tmp_path, case):
+    w = writer()
+    empty = TextStringObject("")
+    if case == "text":
+        js_tree(w, TextStringObject("app.alert(1)"))
+    elif case == "mixed":
+        js_tree(w, empty, TextStringObject("app.alert(1)"))
+    elif case == "stream":
+        js_tree(w, w._add_object(stream(b"app.alert(1)")))
+    elif case == "no_js":                         # действие без текста сценария: непонятно, что это
+        js_tree(w, action("/JavaScript"))
+    elif case == "bare_string":                   # в дереве не действие, а строка
+        js_tree(w, empty)["/Names"][1] = TextStringObject("app.alert(1)")
+    elif case == "extra_key":                     # незнакомый ключ в узле дерева
+        js_tree(w, empty)[N("/Extra")] = TextStringObject("x")
+    elif case == "not_js_action":
+        js_tree(w, action("/Launch", F=TextStringObject("calc.exe")))
+    elif case == "open_action":                   # автоматическое действие — отказ, даже с пустым сценарием
+        w._root_object[N("/OpenAction")] = w._add_object(action("/JavaScript", JS=empty))
+    elif case == "deep":                          # слишком глубокое дерево не разбирается
+        node = js_tree(w, empty)
+        for _ in range(40):
+            parent = DictionaryObject({N("/Kids"): ArrayObject([w._add_object(node)])})
+            node = parent
+        w._root_object[N("/Names")] = DictionaryObject({N("/JavaScript"): w._add_object(node)})
+    res, _ = check(save(tmp_path, w))
+    assert res.reason == "active_content" and res.active, case
+
+
 def test_javascript_inside_object_stream(tmp_path):
     """Действие лежит в сжатом потоке объектов: в байтах файла слова JavaScript нет."""
     w = writer()

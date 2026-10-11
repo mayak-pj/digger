@@ -29,6 +29,8 @@ TEXT_MIN_CHARS = 20
 MAX_OBJECTS = 2000000         # защита от файла-«бомбы»: больше объектов не бывает и у справочников на 5000 страниц
 
 # Ключ словаря → название находки. Само наличие ключа — уже активное содержимое.
+# Исключение одно — JavaScript с пустым текстом (`_empty_script`, `_empty_js_tree`): исполнять нечего.
+JS_TREE_DEPTH, JS_TREE_NODES = 8, 1000     # дерево имён /JavaScript крупнее не разбирается — отказ
 ACTIVE_KEYS = {
     "/JS": "JavaScript", "/JavaScript": "JavaScript",
     "/EmbeddedFiles": "EmbeddedFiles", "/EF": "EmbeddedFiles",
@@ -178,13 +180,15 @@ def find_active_content(reader: Any) -> List[str]:
             for k in obj:
                 name = str(k)
                 value = obj.raw_get(k)
-                if name in ACTIVE_KEYS:
+                if name == "/JS" and _empty_script(obj) or name == "/JavaScript" and _empty_js_tree(value):
+                    pass                          # сценарий без текста (datasheet AT24C02D, шаг 8.3h)
+                elif name in ACTIVE_KEYS:
                     found.add(ACTIVE_KEYS[name])
                 elif name in AUTO_KEYS:
                     auto_action(value, AUTO_KEYS[name])
                 elif name == "/S":
                     kind = ACTIVE_ACTIONS.get(str(_resolve(value)))
-                    if kind:
+                    if kind and not (kind == "JavaScript" and _empty_script(obj)):
                         found.add(kind)
                 elif name in ("/Type", "/Subtype"):
                     kind = ACTIVE_TYPES.get(str(_resolve(value)))
@@ -197,6 +201,50 @@ def find_active_content(reader: Any) -> List[str]:
                 if isinstance(value, (IndirectObject, DictionaryObject, ArrayObject)):
                     stack.append(value)
     return sorted(found)
+
+
+def _empty_script(action: Any) -> bool:
+    """Действие с ключом `/JS`, текст которого пуст: строка из одних пробелов или поток без байтов (сырые данные,
+    без раскодирования). Всё, чего не удалось прочитать или понять, пустым не считается."""
+    from pypdf.generic import ByteStringObject, DictionaryObject, StreamObject, TextStringObject
+
+    action = _resolve(action)
+    if not isinstance(action, DictionaryObject) or "/JS" not in action:
+        return False
+    js = _resolve(action.raw_get("/JS"))
+    if isinstance(js, StreamObject):
+        data = getattr(js, "_data", None)
+        return isinstance(data, bytes) and not data.strip()
+    if isinstance(js, (TextStringObject, ByteStringObject)):
+        return not js.strip()
+    return False
+
+
+def _empty_js_tree(root: Any) -> bool:
+    """Дерево имён `/Names → /JavaScript`, в котором нет ни одного сценария с текстом. Узел — только из ключей
+    `/Names`, `/Kids`, `/Limits`; значение имени — только действие JavaScript с пустым `/JS`. Иначе — False."""
+    from pypdf.generic import ArrayObject, DictionaryObject
+
+    todo, nodes = [(root, 0)], 0
+    while todo:
+        node, depth = todo.pop()
+        node = _resolve(node)
+        nodes += 1
+        if not isinstance(node, DictionaryObject) or depth > JS_TREE_DEPTH or nodes > JS_TREE_NODES:
+            return False
+        if any(str(k) not in ("/Names", "/Kids", "/Limits") for k in node):
+            return False
+        names, kids = _resolve(node.raw_get("/Names")) if "/Names" in node else ArrayObject(), \
+            _resolve(node.raw_get("/Kids")) if "/Kids" in node else ArrayObject()
+        if not isinstance(names, ArrayObject) or not isinstance(kids, ArrayObject) or len(names) % 2:
+            return False
+        for value in list(list.__iter__(names))[1::2]:
+            action = _resolve(value)
+            if not (isinstance(action, DictionaryObject) and str(_resolve(action.get("/S"))) == "/JavaScript"
+                    and _empty_script(action)):
+                return False
+        todo.extend((kid, depth + 1) for kid in list.__iter__(kids))
+    return True
 
 
 def _resolve(obj: Any) -> Any:

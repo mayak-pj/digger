@@ -108,7 +108,7 @@ def collect(facts: DocFacts, ctx: PhotoContext, url: str = "", trust: Optional[S
     if pattern and not exact:
         add("E3", w["E3"], pattern)
     where = facts.heading + "\n" + facts.title
-    titled = bool(full) and (_names_in(where, (full, base, _norm(family(ctx.part))))
+    titled = bool(full) and (_names_in(where, (full, base)) or _names_in(where, (_norm(family(ctx.part)),), prefix=0)
                              or any(p in re.sub(r"\s+", "", where) for p in facts.family_patterns
                                     if covers(p, ctx.part)))
     if titled:
@@ -141,11 +141,13 @@ def _norm(text: str) -> str:
 def _exact(facts: DocFacts, full: str, base: str) -> Optional[Tuple[str, int]]:
     """Партномер (полный или основа) как записан в документе и первая страница, где он есть.
     Основа — и то, что документ называет сам, если наш партномер длиннее на короткий буквенный суффикс:
-    «W25Q512JVFQ» на корпусе — это «W25Q512JV» в документе; «STM32F103C8» и «STM32F103» — разные чипы."""
+    «W25Q512JVFQ» на корпусе — это «W25Q512JV» в документе; «STM32F103C8» и «STM32F103» — разные чипы.
+    И наоборот: на фото партномер без суффикса («AT24C02»), документ пишет его с суффиксом корпуса («AT24C02N»)."""
     def same(name: str) -> bool:
         n = _norm(name)
         tail = full[len(n):] if full.startswith(n) else ""
-        return n in (full, base) or (len(n) >= MIN_STEM and tail.isalpha() and len(tail) <= MAX_SUFFIX)
+        return (n in (full, base) or (len(n) >= MIN_STEM and tail.isalpha() and len(tail) <= MAX_SUFFIX)
+                or (full == base and n != base and _norm(base_part(name)) == base))
 
     hits = [(pages[0], name) for name, pages in facts.parts_found.items() if pages and same(name)]
     if not hits:
@@ -161,11 +163,13 @@ def _quote(doc: Optional[DocText], page: int, name: str) -> str:
     return name
 
 
-def _names_in(text: str, names: Sequence[str]) -> bool:
+def _names_in(text: str, names: Sequence[str], prefix: int = 3) -> bool:
     """Есть ли в тексте одно из имён отдельным словом; суффикс допустим (NE555P), другая цифра — нет (LM3580).
-    Перед именем допустим префикс производителя: маркировка на корпусе бывает усечённой (25Q64JV — это W25Q64JV)."""
+    Перед именем допустим префикс производителя: маркировка на корпусе бывает усечённой (25Q64JV — это W25Q64JV).
+    Для имени семейства префикс не допускается (`prefix=0`): «AT24» внутри «CAT24C021» — чужой чип."""
     squeezed = re.sub(r"[^A-Z0-9\s]", "", text.upper())
-    return any(re.search(r"(?<![A-Z0-9])[A-Z]{0,3}%s(?!\d)" % re.escape(n), squeezed) for n in names if len(n) >= 4)
+    return any(re.search(r"(?<![A-Z0-9])[A-Z]{0,%d}%s(?!\d)" % (prefix, re.escape(n)), squeezed)
+               for n in names if len(n) >= 4)
 
 
 def _canon_maker(name: str) -> str:
