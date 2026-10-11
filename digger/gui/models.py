@@ -24,7 +24,7 @@ PHOTO_STATES = {"new": (u"", "text_muted"),
                 "search": (u"ищу…", "accent"),
                 "memory": (u"память", "danger"),
                 "no_memory": (u"без памяти", "success"),
-                "unknown": (u"память: ?", "text_muted"),
+                "unknown": (u"память не определена", "text_muted"),
                 "no_local": (u"нет в базе", "text_muted"),       # распознано, в интернете ещё не искали
                 "not_found": (u"не найдено", "warning"),         # искали в интернете — документа нет
                 "unread": (u"не распознано", "warning")}
