@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (QAbstractItemView, QAction, QApplication, QDockWidg
                              QVBoxLayout, QWidget)
 
 from ..acquire.events import Event
+from ..acquire.store import AcquireStore
 from ..core.config import resolve_path
 from ..core.pipeline import ChipPipeline, create_context
 from ..core.utils import safe_filename
@@ -1023,8 +1024,10 @@ class MainWindow(QMainWindow):
 
     def db_stats(self):
         st = self.ctx.modules["local_db"].stats()
+        st["pending"] = AcquireStore(self.ctx.modules["local_db"]).pending_count()
         QMessageBox.information(self, "База", "Файлов в индексе: %(files)d\nСкачано программой: %(library)d\n"
-                                              "Деталей в каталоге: %(catalog)d\n\nИндекс: %(db)s\nБиблиотека: %(library_dir)s" % st)
+                                              "Деталей в каталоге: %(catalog)d\nЖдут переноса в библиотеку: %(pending)d\n\n"
+                                              "Индекс: %(db)s\nБиблиотека: %(library_dir)s" % st)
 
     def diagnose(self):
         ws = self.ctx.modules["web_search"]

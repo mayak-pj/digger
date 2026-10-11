@@ -270,6 +270,13 @@ def shoot(app, theme: str, out_dir: str, prefix: str, ocr: bool) -> None:
                 app.processEvents()
                 time.sleep(0.02)
             save(w, name("marking_fixes"))
+        lib = w.ext.get("library_status").instance if w.ext and w.ext.get("library_status") else None
+        if lib is not None:                                     # вкладка «Библиотека» (9.5b)
+            w.tabs.setCurrentWidget(lib.view)
+            for _ in range(40):
+                app.processEvents()
+                time.sleep(0.02)
+            save(w, name("library"))
         for part, dlg in (("settings", SettingsDialog(w.ctx, w)), ("extensions", ExtensionsDialog(w.ext, w)),
                           ("diagnostics", diag), ("adapters", ada)):
             dlg.show()

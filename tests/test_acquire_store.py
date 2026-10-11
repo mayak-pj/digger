@@ -203,3 +203,21 @@ def test_flush_drops_duplicate_when_another_workstation_already_stored_it(tmp_pa
     os.makedirs(os.path.dirname(theirs), exist_ok=True)
     open(theirs, "wb").write(PDF)
     assert store.flush_pending() == 1 and not os.path.exists(pending) and os.path.isfile(theirs)
+
+
+def test_library_status_available_and_pending_count(tmp_path, store, monkeypatch):
+    st = store.library_status()
+    assert st["available"] and st["pending"] == 0 and st["error"] == ""
+    assert not any(n.startswith(".digger_probe") for n in os.listdir(store.db.library_dir))   # пробный файл убран
+    repair = break_library(tmp_path, monkeypatch)
+    store.save(make_rec(tmp_path))
+    assert store.pending_count() == 1 and store.library_status()["pending"] == 1
+    repair()
+
+
+def test_library_status_unreachable(tmp_path, store, monkeypatch):
+    def deny(*a, **k):
+        raise OSError(53, "сетевой путь не найден")
+    monkeypatch.setattr(os, "makedirs", deny)
+    st = store.library_status()
+    assert st["available"] is False and "сетевой путь" in st["error"]

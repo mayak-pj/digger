@@ -177,6 +177,26 @@ class AcquireStore:
             json.dump(passport, f, ensure_ascii=False, indent=2)
         os.replace(tmp, path + ".json")
 
+    def pending_count(self) -> int:
+        """Сколько документов ждут переноса в библиотеку (локально, быстро)."""
+        root = self.pending_dir
+        return sum(1 for _, _, names in os.walk(root) for n in names if n.endswith(".pdf")) if os.path.isdir(root) else 0
+
+    def library_status(self) -> Dict[str, Any]:
+        """Состояние общей библиотеки: доступна ли для записи и сколько документов ждут. Может быть медленным
+        (сетевой диск) — вызывать в фоне. Пробный файл создаётся и сразу удаляется."""
+        lib, error = self.db.library_dir, ""
+        try:
+            os.makedirs(lib, exist_ok=True)
+            probe = os.path.join(lib, ".digger_probe_%d.part" % os.getpid())
+            with open(probe, "wb") as f:
+                f.write(b"ok")
+            os.remove(probe)
+        except OSError as e:
+            error = str(e)
+        return {"library_dir": lib, "available": not error, "error": error,
+                "pending": self.pending_count(), "pending_dir": self.pending_dir}
+
     def flush_pending(self) -> int:
         """Переносит документы из `library_pending/` в библиотеку; возвращает, сколько перенесено.
         Недоступная библиотека — не ошибка: файлы остаются на месте до следующего раза."""
