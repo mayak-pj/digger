@@ -9,6 +9,7 @@ __pycache__/
 *.pyc
 # данные программы
 data/library/*
+data/library_pending/
 !data/library/.keep
 data/quarantine/
 *.sqlite

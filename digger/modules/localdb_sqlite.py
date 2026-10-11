@@ -204,7 +204,7 @@ class SQLiteLocalDB(LocalDB):
             if score <= 0 or (path in best and best[path].score >= score):
                 continue
             best[path] = DatasheetHit(part=part, title=name, location=path,
-                                      source="library" if origin == "library" else "network",
+                                      source="library" if origin in ("library", "pending") else "network",
                                       level="local", score=round(score, 3), is_local=True,
                                       is_pdf=True, note=why)
         return sorted(best.values(), key=lambda h: -h.score)[:limit]
@@ -370,7 +370,7 @@ class SQLiteLocalDB(LocalDB):
     def stats(self) -> Dict[str, Any]:
         with self._lock:
             files = self.conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
-            lib = self.conn.execute("SELECT COUNT(*) FROM files WHERE origin='library'").fetchone()[0]
+            lib = self.conn.execute("SELECT COUNT(*) FROM files WHERE origin IN ('library','pending')").fetchone()[0]
             cat = self.conn.execute("SELECT COUNT(*) FROM catalog").fetchone()[0]
         return {"files": files, "library": lib, "catalog": cat, "db": self.db_path,
                 "library_dir": self.library_dir}

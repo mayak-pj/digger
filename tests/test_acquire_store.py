@@ -150,3 +150,56 @@ def test_russian_path_and_unknown_source(tmp_path):
     dst = AcquireStore(db).save(rec)
     assert os.path.isfile(dst) and "__web__" in dst
     db.close()
+
+
+def break_library(tmp_path, monkeypatch):
+    """Библиотека «недоступна»: любая запись под ней — OSError."""
+    import shutil
+    lib = str(tmp_path / "lib")
+    real_copy = shutil.copyfile
+
+    def copy(src, dst, *a, **k):
+        if os.path.abspath(dst).startswith(lib + os.sep):
+            raise OSError(53, "сетевой путь не найден")
+        return real_copy(src, dst, *a, **k)
+    monkeypatch.setattr(shutil, "copyfile", copy)
+    return lambda: monkeypatch.setattr(shutil, "copyfile", real_copy)
+
+
+def test_copy_is_atomic_no_part_files_left(tmp_path, store):
+    dst = store.save(make_rec(tmp_path))
+    names = os.listdir(os.path.dirname(dst))
+    assert sorted(n for n in names if n.endswith(".part")) == [] and os.path.basename(dst) + ".json" in names
+
+
+def test_unreachable_library_keeps_document_locally_then_flushes(tmp_path, store, monkeypatch):
+    repair = break_library(tmp_path, monkeypatch)
+    dst = store.save(make_rec(tmp_path))
+    assert dst.startswith(store.pending_dir) and os.path.isfile(dst) and os.path.isfile(dst + ".json")
+    assert not any(n.endswith(".part") for _, _, fs in os.walk(str(tmp_path)) for n in fs)
+    assert store.db.conn.execute("SELECT origin FROM files WHERE path=?", (dst,)).fetchone()[0] == "pending"
+    assert store.flush_pending() == 0 and os.path.isfile(dst)               # библиотека всё ещё недоступна
+    repair()
+    assert store.flush_pending() == 1
+    new = os.path.join(store.db.library_dir, os.path.relpath(dst, store.pending_dir))
+    assert os.path.isfile(new) and os.path.isfile(new + ".json") and not os.path.exists(dst)
+    assert store.db.conn.execute("SELECT path, origin FROM files").fetchall() == [(new, "library")]
+
+
+def test_pending_is_flushed_on_next_save(tmp_path, store, monkeypatch):
+    repair = break_library(tmp_path, monkeypatch)
+    pending = store.save(make_rec(tmp_path))
+    repair()
+    other = store.save(make_rec(tmp_path, data=PDF2, part="LM358", name="b.pdf"))
+    assert other.startswith(store.db.library_dir) and not os.path.exists(pending)
+    assert store.db.conn.execute("SELECT COUNT(*) FROM files WHERE origin='library'").fetchone()[0] == 2
+
+
+def test_flush_drops_duplicate_when_another_workstation_already_stored_it(tmp_path, store, monkeypatch):
+    repair = break_library(tmp_path, monkeypatch)
+    pending = store.save(make_rec(tmp_path))
+    repair()
+    theirs = os.path.join(store.db.library_dir, os.path.relpath(pending, store.pending_dir))
+    os.makedirs(os.path.dirname(theirs), exist_ok=True)
+    open(theirs, "wb").write(PDF)
+    assert store.flush_pending() == 1 and not os.path.exists(pending) and os.path.isfile(theirs)

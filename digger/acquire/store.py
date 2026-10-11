@@ -9,6 +9,11 @@
 
 Один и тот же sha256 не дублируется: повторное скачивание возвращает прежний файл; «вероятный» файл,
 который потом подтвердили, переезжает в `confirmed/` (обратно не понижается).
+
+Несколько рабочих мест (шаг 9.5a): файл пишется во временное имя `.part` и переименовывается, поэтому другая
+копия программы, сканирующая общую библиотеку, не увидит недокачанный PDF. Если сетевая библиотека
+недоступна, документ ложится в локальную папку `library_pending/` рядом с индексом (та же раскладка) и
+переносится в библиотеку при следующем сохранении или вызове `flush_pending()`; поиск его видит сразу.
 """
 from __future__ import annotations
 
@@ -16,6 +21,7 @@ import datetime
 import hashlib
 import io
 import json
+import logging
 import os
 import shutil
 from typing import Any, Dict, List
@@ -24,6 +30,8 @@ from .. import __version__
 from ..core.utils import norm_part, safe_filename
 from .models import AcquisitionRecord
 
+log = logging.getLogger("digger.acquire.store")
+PENDING_DIR = "library_pending"
 SCHEMA_VERSION = 1
 STORED_STATUSES = ("confirmed", "probable")
 SCHEMA = """
@@ -86,6 +94,7 @@ class AcquireStore:
     # -------------------- сохранение --------------------
     def save(self, rec: AcquisitionRecord) -> str:
         """Кладёт файл из карантина в библиотеку; возвращает путь или "" (отказ, нужен пользователь)."""
+        self.flush_pending()
         status = rec.verdict.status if rec.verdict else "rejected"
         path = ""
         passport: Dict[str, Any] = {}
@@ -102,6 +111,25 @@ class AcquireStore:
         sub = os.path.join(self.db.library_dir, status, safe_filename(norm_part(part)[:2] or "_"))
         return os.path.join(sub, "%s__%s__%s.pdf" % (safe_filename(part), safe_filename(source, 20), sha[:8]))
 
+    @property
+    def pending_dir(self) -> str:
+        return os.path.join(os.path.dirname(os.path.abspath(self.db.db_path)), PENDING_DIR)
+
+    @staticmethod
+    def _copy_atomic(src: str, dst: str) -> None:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        tmp = dst + ".part"
+        try:
+            shutil.copyfile(src, tmp)
+            os.replace(tmp, dst)
+        except OSError:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+            raise
+
     def _place(self, rec: AcquisitionRecord, src: str, status: str, sha: str, passport: Dict[str, Any]) -> str:
         db = self.db
         with db._lock:
@@ -109,10 +137,17 @@ class AcquireStore:
             if row and os.path.exists(row[0]):
                 return self._reuse(row[0], rec, status, passport)
             dst = self._dest(rec.part, passport["source"], status, sha)
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copyfile(src, dst)
-            self._write_passport(dst, passport)
-            db._add_file(dst, "library", sha, passport["url"], [rec.part])
+            origin = "library"
+            try:
+                self._copy_atomic(src, dst)
+                self._write_passport(dst, passport)
+            except OSError as e:        # сетевая библиотека недоступна или переполнена — не теряем документ
+                log.warning("библиотека недоступна (%s), документ сохранён локально", e)
+                dst = os.path.join(self.pending_dir, os.path.relpath(dst, db.library_dir))
+                self._copy_atomic(src, dst)
+                self._write_passport(dst, passport)
+                origin = "pending"
+            db._add_file(dst, origin, sha, passport["url"], [rec.part])
             db.conn.commit()
             return dst
 
@@ -137,8 +172,46 @@ class AcquireStore:
 
     @staticmethod
     def _write_passport(path: str, passport: Dict[str, Any]) -> None:
-        with io.open(path + ".json", "w", encoding="utf-8") as f:
+        tmp = path + ".json.part"
+        with io.open(tmp, "w", encoding="utf-8") as f:
             json.dump(passport, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path + ".json")
+
+    def flush_pending(self) -> int:
+        """Переносит документы из `library_pending/` в библиотеку; возвращает, сколько перенесено.
+        Недоступная библиотека — не ошибка: файлы остаются на месте до следующего раза."""
+        db, root, moved = self.db, self.pending_dir, 0
+        if not os.path.isdir(root):
+            return 0
+        for folder, _, names in os.walk(root):
+            for name in sorted(names):
+                if not name.endswith(".pdf"):
+                    continue
+                path = os.path.join(folder, name)
+                dst = os.path.join(db.library_dir, os.path.relpath(path, root))
+                try:
+                    if os.path.exists(dst):                  # другая копия уже положила тот же документ
+                        os.remove(path)
+                    else:
+                        self._copy_atomic(path, dst)
+                        if os.path.exists(path + ".json"):
+                            self._copy_atomic(path + ".json", dst + ".json")
+                        os.remove(path)
+                    if os.path.exists(path + ".json"):
+                        os.remove(path + ".json")
+                except OSError as e:
+                    log.warning("перенос в библиотеку не удался (%s)", e)
+                    return moved
+                with db._lock:
+                    row = db.conn.execute("SELECT id FROM files WHERE path=?", (dst,)).fetchone()
+                    if row:                                   # путь в библиотеке уже в индексе — лишняя строка
+                        db.conn.execute("DELETE FROM parts WHERE file_id IN (SELECT id FROM files WHERE path=?)", (path,))
+                        db.conn.execute("DELETE FROM files WHERE path=?", (path,))
+                    else:
+                        db.conn.execute("UPDATE files SET path=?, origin='library' WHERE path=?", (dst, path))
+                    db.conn.commit()
+                moved += 1
+        return moved
 
     # -------------------- журналы --------------------
     def _log_acquisition(self, rec: AcquisitionRecord, status: str, path: str, passport: Dict[str, Any]) -> None:
