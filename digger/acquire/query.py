@@ -118,6 +118,20 @@ def prefixed_parts(base: str, maker: str = "", table: Optional[dict] = None) -> 
     return []
 
 
+def maker_by_prefix(part: str, table: Optional[dict] = None) -> str:
+    """STM32F103C8T6 → STMicroelectronics: производитель семейства, которое выпускает он один (`families` в
+    data/maker_prefixes.json). Ряды, которые делают многие (LM358, 74HC595), — пустая строка."""
+    table = load_prefix_table() if table is None else table
+    name = _compact(part)
+    for rule in table.get("families", []) if name else []:
+        try:
+            if re.search(rule["pattern"], name):
+                return str(rule.get("maker", ""))
+        except (re.error, KeyError, TypeError):
+            continue
+    return ""
+
+
 @dataclass
 class Query:
     lang: str

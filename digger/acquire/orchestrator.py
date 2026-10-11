@@ -35,7 +35,7 @@ from .events import Event, EventBus
 from .fetch import fetch_to_quarantine
 from .models import AcquisitionRecord, Lead, PhotoContext
 from .netdiag import SITE_PROTECTED, TRANSIENT, BlockTracker, failure_class
-from .query import DEFAULT_ORDER, Query, base_part, is_smd_code, plan_queries
+from .query import DEFAULT_ORDER, Query, base_part, is_smd_code, maker_by_prefix, plan_queries
 from .rank import normalize_url, score_lead
 from .stats import QUERY_KEYS
 from .store import AcquireStore, _now
@@ -123,13 +123,15 @@ class Orchestrator:
     def search(self, ctx: PhotoContext, everywhere: bool = False) -> SearchResult:
         """Полный поиск документа для чипа. `everywhere` — «искать везде»: не останавливаться на подтверждённом."""
         self._cancel.clear()
+        if not ctx.manufacturer and maker_by_prefix(ctx.part):       # поиск по одному партномеру: STM32 — это ST
+            ctx = replace(ctx, manufacturer=maker_by_prefix(ctx.part), maker_guessed=True)
         self._ctx, self._res = ctx, SearchResult(part=ctx.part or ctx.marking)
         self._asked, self._seen, self._url, self._why = set(), set(), "", ""
         self._skipped = set()                          # медленные сайты, о пропуске которых в этом поиске уже сказано
         self._started = self.clock()
         self._sites = {en.id: en.domains[0] for en in self.registry.entries(include_disabled=True) if en.domains}
         if self.recorder is not None:
-            self.recorder.begin(self._res.part, ctx.manufacturer)
+            self.recorder.begin(self._res.part, "" if ctx.maker_guessed else ctx.manufacturer)
         unsubscribe = self.bus.subscribe(self._watch)
         try:
             if not (self._local() and not everywhere):

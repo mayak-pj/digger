@@ -138,3 +138,21 @@ def test_no_prefix_when_already_full_or_unknown():
     assert _parts(plan_queries("NE555", langs=["en"])) == ["NE555"]
     assert _parts(plan_queries("A6W", langs=["en"])) == ["A6W"]
     assert _parts(plan_queries("25Q64", langs=["en"], prefixes={})) == ["25Q64"]
+
+
+@pytest.mark.parametrize("part, maker", [
+    ("STM32F103C8T6", "STMicroelectronics"), ("GD32F103C8T6", "GigaDevice"), ("W25Q64JV", "Winbond"),
+    ("CH340G", "WCH"), ("ESP8266EX", "Espressif"), ("STC89C52RC", "STC"), ("PMS150C", "Padauk"),
+    ("AT24C02", "Microchip"), ("stm32f103c8t6", "STMicroelectronics"),
+    ("NE555", ""), ("LM358", ""), ("74HC595", ""), ("AMS1117", ""), ("25Q64JV", ""), ("", ""),
+])
+def test_maker_by_prefix(part, maker):
+    """Производитель известен по партномеру только у семейств, которые выпускает он один."""
+    from digger.acquire.query import maker_by_prefix
+    assert maker_by_prefix(part) == maker
+
+
+def test_maker_by_prefix_survives_broken_table():
+    from digger.acquire.query import maker_by_prefix
+    table = {"families": [{"pattern": "("}, {"maker": "X"}, {"pattern": "^AB", "maker": "Acme"}]}
+    assert maker_by_prefix("AB12", table) == "Acme" and maker_by_prefix("AB12", {}) == ""

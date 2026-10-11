@@ -191,7 +191,8 @@ def _maker(add: Any, w: Mapping[str, Any], facts: DocFacts, ctx: PhotoContext, t
         if _canon_maker(name) == wanted or (sites.get(wanted) and sites.get(wanted) == sites.get(_canon_maker(name))):
             add("E6", w["E6_match"], name)
             return
-    add("E6", w["E6_conflict"], ", ".join(facts.manufacturers))
+    if not ctx.maker_guessed:     # догадка по семейству фото не заменяет: чужое имя в документе — не противоречие
+        add("E6", w["E6_conflict"], ", ".join(facts.manufacturers))
 
 
 def _pkg_key(name: str) -> Tuple[str, int]:

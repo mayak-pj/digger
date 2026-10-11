@@ -25,5 +25,24 @@
     {"pattern": "^8\\d?C\\d", "variants": [
       {"prefix": "AT", "maker": "Microchip", "aliases": ["microchip", "atmel"]}
     ]}
+  ],
+  "_families_readme": "Семейства одного производителя: по началу полного партномера производитель известен и без логотипа (STM32 — только ST). Сюда не вносить ряды, которые выпускают многие (LM358, NE555, 74HC, 24C, 1117): по ним производитель не определяется. Срабатывает первое подходящее правило.",
+  "families": [
+    {"pattern": "^STM(32|8)", "maker": "STMicroelectronics"},
+    {"pattern": "^GD(32|25)", "maker": "GigaDevice"},
+    {"pattern": "^W(25|29)[A-Z]", "maker": "Winbond"},
+    {"pattern": "^MX(25|29|30|66)", "maker": "Macronix"},
+    {"pattern": "^CH\\d{3}", "maker": "WCH"},
+    {"pattern": "^ESP(32|8266|8285)", "maker": "Espressif"},
+    {"pattern": "^STC\\d", "maker": "STC"},
+    {"pattern": "^P[MF][SC]\\d{3}", "maker": "Padauk"},
+    {"pattern": "^(PIC\\d|DSPIC|ATMEGA|ATTINY|ATXMEGA|ATSAM|AT(24|25|45|93)[A-Z])", "maker": "Microchip"},
+    {"pattern": "^(MSP430|TMS320|TPS\\d)", "maker": "Texas Instruments"},
+    {"pattern": "^(N76E|NUC\\d|MS51)", "maker": "Nuvoton"},
+    {"pattern": "^HT(32|46|48|66)", "maker": "Holtek"},
+    {"pattern": "^FT\\d{3,4}[A-Z]", "maker": "FTDI"},
+    {"pattern": "^IS(25|42|61|62)", "maker": "ISSI"},
+    {"pattern": "^(EFM(8|32)|EFR32|CP21\\d)", "maker": "Silicon Labs"},
+    {"pattern": "^(P25Q|PY32)", "maker": "Puya"}
   ]
 }

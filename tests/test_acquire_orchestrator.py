@@ -354,3 +354,16 @@ def test_lead_to_slow_site_is_not_followed(env):
     assert res.downloads == 0 and fake.calls == [] and res.status == "not_found"
     assert keys(bus).count("site.slow_skip") == 1             # один раз за поиск, а не на каждую ссылку
     assert res.conclusion is not None
+
+
+def test_maker_is_taken_from_part_family_when_photo_gave_none(env):
+    """Поиск по одному партномеру: STM32 — это ST; названный производитель и общие ряды (NE555) не трогаются."""
+    orch, _ = build(env, FakeHttp(), [source("a", "catalog")])
+    ctx = PhotoContext(part="STM32F103C8T6")
+    orch.search(ctx)
+    assert (orch._ctx.manufacturer, orch._ctx.maker_guessed) == ("STMicroelectronics", True)
+    assert ctx.manufacturer == ""                                   # запись вызывающего не меняется
+    orch.search(PhotoContext(part="STM32F103C8T6", manufacturer="GigaDevice"))
+    assert (orch._ctx.manufacturer, orch._ctx.maker_guessed) == ("GigaDevice", False)
+    orch.search(PhotoContext(part="NE555"))
+    assert (orch._ctx.manufacturer, orch._ctx.maker_guessed) == ("", False)

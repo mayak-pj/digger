@@ -193,3 +193,13 @@ def test_hard_reject_and_thresholds():
     assert D.decide(ev(E1=30, E5=15), validation=ValidationResult(ok=True)).status == "probable"
     assert D.decide(ev(E1=30, E5=15), thresholds={"confirmed": 45}).status == "confirmed"
     assert D.decide(ev(E1=30, E5=15), thresholds={"probable": 50}).status == "rejected"
+
+
+def test_guessed_maker_matches_but_never_conflicts():
+    """Производитель по семейству партномера (не с фото): совпадение — улика, чужое имя в документе — нет."""
+    guessed = PhotoContext(part="STM32F103C8T6", manufacturer="STMicroelectronics", maker_guessed=True)
+    own = DocFacts(pages=2, has_text=True, parts_found={"STM32F103C8T6": [1]}, manufacturers=["STMicroelectronics"])
+    other = DocFacts(pages=2, has_text=True, parts_found={"STM32F103C8T6": [1]}, manufacturers=["Philips"])
+    assert codes(V.collect(own, guessed))["E6"] == 10
+    assert "E6" not in codes(V.collect(other, guessed))
+    assert codes(V.collect(other, ctx("STM32F103C8T6", "STMicroelectronics")))["E6"] == -15
