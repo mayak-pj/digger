@@ -5,6 +5,7 @@
 Дома на Mac:  python tools/win7_pack/ppocr_check.py my_test/ocr  →  my_reports/ocr_bench_<дата>.md
 """
 import argparse
+import contextlib
 import csv
 import datetime
 import json
@@ -13,6 +14,7 @@ import re
 import sys
 import time
 import traceback
+import warnings
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 IMG_EXT = (".jpg", ".jpeg", ".jfif", ".png", ".bmp", ".tif", ".tiff", ".webp")
@@ -215,6 +217,30 @@ def _tesseract_engine():
     return {"tesseract_psm6": make(6), "tesseract_psm11": make(11)}
 
 
+@contextlib.contextmanager
+def native_stderr_to(path):
+    """Сообщения библиотек на C++ (onnxruntime при загрузке: нет `onnxruntime_providers_shared.dll`, «Windows 10
+    and above» — на Win7 безвредно) — в файл отчёта, а не в окно проверки, где их принимают за ошибку."""
+    try:
+        sys.stderr.flush()
+        saved = os.dup(2)
+        target = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+    except (OSError, ValueError, AttributeError):       # stderr закрыт или подменён — работаем как раньше
+        yield
+        return
+    try:
+        os.dup2(target, 2)
+        yield
+    finally:
+        try:
+            sys.stderr.flush()
+        except (OSError, ValueError):
+            pass
+        os.dup2(saved, 2)
+        os.close(saved)
+        os.close(target)
+
+
 def libs_report():
     """Диагностика окружения PP-OCR: библиотеки программы (site-packages), DLL Visual C++ рядом с python.exe."""
     pydir = os.path.dirname(os.path.abspath(sys.executable))
@@ -231,7 +257,10 @@ def libs_report():
 
 def run(ctx):
     """Проверка набора: PP-OCR на фото из `фото/`."""
-    diag = libs_report()
+    noise = os.path.join(ctx.work_dir, "onnxruntime_stderr.txt")
+    with native_stderr_to(noise), warnings.catch_warnings():
+        warnings.simplefilter("ignore")            # «Unsupported Windows version (7)» — тоже не в окно
+        diag = libs_report()
     with open(os.path.join(ctx.work_dir, "ppocr_libs.json"), "w", encoding="utf-8") as f:
         json.dump(diag, f, ensure_ascii=False, indent=2)
     photos = ctx.photos_dir
@@ -241,7 +270,8 @@ def run(ctx):
                  "строкой маркировки, файл назван этой строкой) в папку %s и запустите проверку ещё раз." % photos)
         return {"status": "skip", "note": "нет картинок в папке %s" % photos, "libs": diag, "photos_dir": photos}
     try:
-        engines = make_engines()
+        with native_stderr_to(noise):
+            engines = make_engines()
     except BaseException:  # noqa — полный текст ошибки загрузки — в отчёт
         tb = traceback.format_exc()
         with open(os.path.join(ctx.work_dir, "ppocr_load_error.txt"), "w", encoding="utf-8") as f:

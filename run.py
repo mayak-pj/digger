@@ -21,7 +21,8 @@ def main():
     if "--selftest" in sys.argv:
         import pytest
         extra = sys.argv[sys.argv.index("--selftest") + 1:]     # например -vv --deselect=… (проверка selftest)
-        return int(pytest.main(["-q", "-m", "not live"] + extra + [os.path.join(d, "tests")]))
+        named = any("::" in a for a in extra)                    # названы отдельные тесты — только они
+        return int(pytest.main(["-q", "-m", "not live"] + extra + ([] if named else [os.path.join(d, "tests")])))
     from digger.gui.main_window import main as gui_main
     return gui_main(d)
 

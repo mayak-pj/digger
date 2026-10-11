@@ -125,6 +125,69 @@ def test_selftest_check_finds_crashing_tests_and_runs_the_rest(tmp_path):
     assert res["rest_returncode"] == 0 and res["rest_tail"][-1] == "2 passed, 2 deselected"
     verbose = (tmp_path / "selftest_verbose.txt").read_text(encoding="utf-8")
     assert verbose.count("=== -vv") == 3 and "--deselect=tests/test_d.py::test_native" in verbose
+    # шаг 8.3e: причина собрана сама — каждый виновник отдельным процессом в режимах windows и offscreen
+    assert res["crash_runs"] == {t: {"windows": 70, "offscreen": 70} for t in res["crashed_tests"]}
+    assert set(res["qt_probe"]) == {"windows/default", "windows/explicit", "offscreen/default", "offscreen/explicit"}
+    assert res["cause"] in res["note"] and "по одному не обрываются 0 из 2" in res["cause"]
+    crash = (tmp_path / "selftest_crash.txt").read_text(encoding="utf-8")
+    assert crash.count("=== проба Qt") == 4 and crash.count("=== тест ") == 4 and "=== вывод" in crash
+
+
+def test_selftest_qt_env_and_verdict(monkeypatch):
+    import selftest
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    win, off = selftest.qt_env("windows"), selftest.qt_env("offscreen")
+    assert "QT_QPA_PLATFORM" not in win and off["QT_QPA_PLATFORM"] == "offscreen"      # режим не наследуется
+    assert win["QT_DEBUG_PLUGINS"] == "1" and win["QT_FORCE_STDERR_LOGGING"] == "1"     # вывод Qt виден
+    ok, bad = {"returncode": 0, "ok": True}, {"returncode": 1073741845, "ok": False}
+    probe = {"windows/default": bad, "windows/explicit": ok, "offscreen/default": bad, "offscreen/explicit": ok}
+    assert "только с явным путём" in selftest.verdict(probe, {"t": {"windows": 1073741845, "offscreen": 0}})
+    assert "ни в одном режиме" in selftest.verdict({k: bad for k in probe}, {})
+    assert "дело в самих тестах" in selftest.verdict({k: ok for k in probe}, {"t": {"windows": 1, "offscreen": 70}})
+
+
+def test_selftest_qt_probe_really_starts_qt(tmp_path):
+    """Проба Qt настоящим интерпретатором: без экрана окно создаётся в обоих вариантах пути к модулям."""
+    pytest.importorskip("PyQt5")
+    import io
+
+    import selftest
+    log = io.StringIO()
+    probe = selftest.qt_probe(rc.Context(str(tmp_path), str(tmp_path)), log)
+    assert probe["offscreen/default"]["ok"] and probe["offscreen/explicit"]["ok"], log.getvalue()
+    assert "libraryPaths" in log.getvalue() and "QT_PROBE_OK platform=offscreen" in log.getvalue()
+
+
+def test_run_py_selftest_runs_only_named_tests():
+    """`run.py --selftest файл::тест` запускает только названный тест (так проверка изолирует виновников)."""
+    app = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    p = subprocess.run([sys.executable, os.path.join(app, "run.py"), "--selftest",
+                        "tests/test_win7_pack.py::test_selftest_last_started"], cwd=app, stdout=subprocess.PIPE,
+                       stderr=subprocess.STDOUT, timeout=120)
+    assert p.returncode == 0 and b"1 passed" in p.stdout and b"deselected" not in p.stdout
+
+
+def test_duration_and_progress_in_check_window(tmp_path):
+    assert [rc.duration(x) for x in (4.8, 59.6, 493.6, 5870)] == [u"5 с", u"1 мин 00 с", u"8 мин 14 с", u"1 ч 37 мин"]
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    for name in ("sysinfo", "live"):
+        (checks / (name + ".py")).write_text("def run(ctx):\n    return {'status': 'ok'}\n", encoding="utf-8")
+    lines = []
+    rc.run_all(str(tmp_path), str(checks), str(tmp_path / "out"), log=lines.append)
+    assert lines[0] == u"== проверка 1 из 2: sysinfo ..."
+    assert lines[2] == u"== проверка 2 из 2: live (обычно до 45 мин) ..." and u"всего прошло" in lines[3]
+
+
+def test_native_stderr_goes_to_report_file(tmp_path):
+    """Сообщения библиотек на C++ (onnxruntime на Win7) пишутся в файл отчёта, а не в окно проверки."""
+    out = tmp_path / u"шум.txt"
+    code = ("import os, sys; sys.path.insert(0, %r); import ppocr_check\n"
+            "with ppocr_check.native_stderr_to(%r):\n    os.write(2, b'LoadLibrary failed with error 126')\n"
+            "os.write(2, b'after')\n" % (os.path.dirname(rc.__file__), str(out)))
+    p = subprocess.run([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    assert p.returncode == 0 and p.stderr == b"after"
+    assert out.read_bytes() == b"LoadLibrary failed with error 126"
 
 
 def test_selftest_last_started():

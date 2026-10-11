@@ -11,6 +11,23 @@ for p in (APP, HERE):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+
+
+def _qt_plugins() -> None:
+    """Путь к модулям Qt — явно, до первого окна в тестах: из папки с русскими буквами Qt их сам не находит
+    и обрывает процесс без трассировки (самопроверка на Win7, выезд 3). Программа делает то же в `main()`."""
+    try:
+        from PyQt5.QtCore import QCoreApplication
+        from digger.gui.main_window import qt_plugins_dir
+    except ImportError:
+        return
+    plugins = qt_plugins_dir()
+    if plugins:
+        QCoreApplication.addLibraryPath(plugins)
+
+
+_qt_plugins()
+
 from digger.core.config import load_config, setup_logging  # noqa: E402
 from digger.core.interfaces import Context  # noqa: E402
 from digger.core.registry import load_modules  # noqa: E402

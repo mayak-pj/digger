@@ -121,6 +121,13 @@ jobs:
           cp -r dist/Digger "dist/Мои программы/"
           cd "dist/Мои программы/Digger"
           env -u QT_QPA_PLATFORM ./python/python.exe run.py --smoke
+      - name: Самопроверка не обрывается из папки с русским именем (проверка selftest, настоящий оконный модуль Qt)
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          cd "dist/Мои программы/Digger"
+          env -u QT_QPA_PLATFORM PATH="/c/Windows/system32:/c/Windows" ./python/python.exe checks/run_checks.py --only selftest --no-ask
+          ./python/python.exe -c "import json; r = json.load(open('tmp/report/results.json', encoding='utf-8'))[0]; print(json.dumps(r, ensure_ascii=False, indent=1)); assert r['returncode'] in range(6) and not r.get('crashed_tests'), 'самопроверка оборвалась'"
       - uses: actions/upload-artifact@v4
         with:
           name: Digger_portable_win7_x64

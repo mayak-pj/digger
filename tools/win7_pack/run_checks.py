@@ -23,6 +23,9 @@ ORDER = ["sysinfo", "selftest", "window", "ppocr_check", "program_ocr", "sites",
 SKIP_FILES = {"run_checks", "live_check"}
 MAX_LOG = 5 * 1024 * 1024
 TODO_FILE = "ЧТО СДЕЛАТЬ.txt"
+# сколько обычно идёт проверка, минут (по отчёту выезда 3: 120 фото, 12 эталонных чипов) — подсказка в окне
+ABOUT_MINUTES = {"selftest": 10, "ppocr_check": 50, "program_ocr": 15, "sites": 3, "adapters": 5, "downloads": 30,
+                 "screens": 3, "live": 45}
 NOTES_FILE = "впечатления.txt"      # пользователь пишет впечатления от окна; файл попадает в отчёт
 
 
@@ -123,6 +126,16 @@ def ask_for_photos(app_dir, ask=input, log=print, opener=None):
     return 0
 
 
+def duration(seconds):
+    """Длительность для окна проверки: «45 с», «12 мин 05 с», «1 ч 38 мин»."""
+    s = int(round(seconds))
+    if s < 60:
+        return "%d с" % s
+    if s < 3600:
+        return "%d мин %02d с" % (s // 60, s % 60)
+    return "%d ч %02d мин" % (s // 3600, s % 3600 // 60)
+
+
 class Context(object):
     def __init__(self, app_dir, work_dir, name=""):
         self.app_dir = app_dir
@@ -177,14 +190,17 @@ def run_all(app_dir, checks_dir=HERE, out_dir=None, only=None, log=print):
         shutil.rmtree(out_dir)
     os.makedirs(out_dir)
     results, todo = [], []
-    for name in discover(checks_dir):
-        if only and name not in only:
-            continue
-        log("== проверка %s ..." % name)
+    names = [n for n in discover(checks_dir) if not only or n in only]
+    started = time.time()
+    for i, name in enumerate(names, 1):
+        about = ABOUT_MINUTES.get(name)
+        log("== проверка %d из %d: %s%s ..." % (i, len(names), name, " (обычно до %d мин)" % about if about else ""))
         res, ctx = run_one(checks_dir, name, app_dir, out_dir)
         if res is None:
             continue
-        log("   %s (%.1f с)%s" % (res["status"], res["seconds"], ": " + res["error"] if res.get("error") else ""))
+        log("   %s (%s)%s; всего прошло %s" % (res["status"], duration(res["seconds"]),
+                                             ": " + res["error"] if res.get("error") else "",
+                                             duration(time.time() - started)))
         results.append(res)
         todo.extend(ctx.todo_items)
     return results, todo
