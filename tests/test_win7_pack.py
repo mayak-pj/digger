@@ -210,6 +210,25 @@ def test_window_check_snapshot(tmp_path):
     assert png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_window_snapshot_traces_crash():
+    """Аварийный выход при снимке окна (на CI был 0xC0000005 без единой строки) оставляет стек в журнале."""
+    import faulthandler
+    import window
+    missing = os.path.join(PACK, u"нет такой папки")
+    was = faulthandler.is_enabled()
+    faulthandler.disable()
+    try:
+        with pytest.raises(OSError):          # до Qt дело не доходит: папки программы нет
+            window.snap("x.png", missing)
+        assert faulthandler.is_enabled()
+    finally:
+        sys.path.remove(missing)
+        if was:
+            faulthandler.enable()
+        else:
+            faulthandler.disable()
+
+
 def test_downloads_report_and_offline(tmp_path):
     import downloads
     rows = [{"part": "NE555", "status": "ok", "valid": 1, "leads": 3, "seconds": 4.2, "budget": False,

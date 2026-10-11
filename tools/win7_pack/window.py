@@ -3,6 +3,7 @@
 
 Снимок делает этот же файл, запущенный с `--snap файл.png` в отдельном процессе: падение Qt не роняет набор.
 """
+import faulthandler
 import os
 import subprocess
 import sys
@@ -30,6 +31,7 @@ def run(ctx):
 
 
 def snap(png, app_dir):
+    faulthandler.enable()     # аварийный выход Qt (0xC0000005) оставит в журнале стек всех потоков, а не только код
     sys.path.insert(0, app_dir)
     os.chdir(app_dir)
     from PyQt5.QtCore import QBuffer, QCoreApplication, QIODevice, QTimer
