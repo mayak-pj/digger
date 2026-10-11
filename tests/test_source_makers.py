@@ -84,3 +84,22 @@ def test_page_template_checks_html(tmp_path):
     fake.add("https://www.wch-ic.com/products/CH340G.html", "<!DOCTYPE html><html><title>CH340</title></html>")
     leads = ad.search(q("CH340G datasheet"), http)
     assert [l.kind for l in leads] == ["page"] and leads[0].url.endswith("CH340G.html")
+
+
+def test_sources_json_addresses_checked_live(tmp_path):
+    """Адреса из sources.json, по которым сайты на самом деле отдают PDF (живая проба 2026-10-11, шаг 8.4b)."""
+    reg = Registry.load(os.path.join(APP, "data", "sources.json"))
+    makers = {a.id: a for a in reg.build("maker") if isinstance(a, MakerUrl)}
+    fake = FakeHttp()
+    http = SafeHttp({"min_interval_sec": 0}, str(tmp_path), logging.getLogger("t"), transport=fake)
+    http.add_allowed(reg.allowed_domains())
+    for source, part, url in [
+        ("maker_ti", "NE555", "https://www.ti.com/lit/ds/symlink/ne555.pdf"),
+        ("maker_espressif", "ESP8266EX",
+         "https://www.espressif.com/sites/default/files/documentation/0a-esp8266ex_datasheet_en.pdf"),
+        ("maker_winbond", "W25Q64JV", "https://www.winbond.com/hq/search-resource-file.jsp?partNo=W25Q64JV&type=datasheet"),
+    ]:
+        fake.add(url, PDF, content_type="application/pdf")
+        leads = makers[source].search(q(part + " datasheet pdf"), http)
+        assert [l.url for l in leads] == [url], source
+    assert not makers["maker_winbond"].applies("NE555") and not makers["maker_ti"].applies("W25Q64JV")
