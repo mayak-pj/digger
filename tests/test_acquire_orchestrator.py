@@ -202,7 +202,8 @@ def test_from_context_runs_real_sources(ctx, tmp_path):
     res = orch.search(PhotoContext(part="NE555P", manufacturer="Texas Instruments"))
     got = keys(bus)
     assert res.status == "not_found" and res.reason == "budget" and res.queries >= 25
-    assert "error.internal" not in got and got[-2:] == ["search.limit", "result.not_found"]
+    assert "error.internal" not in got and got[-1] == "result.not_found"
+    assert got.count("search.limit") == 1        # соседние потоки уровня могут досказать своё после события
     assert len(set(e.lang for e in bus.history())) >= 2 and fake.calls
     assert orch.recorder.stats.search_count() == 1               # статистика поиска записана
 
@@ -280,3 +281,76 @@ def test_budget_event_once_from_parallel_sources(env):
                       budget=Budget(queries=2))
     res = search(orch)
     assert res.reason == "budget" and keys(bus).count("search.limit") == 1
+
+
+# -------------------- шаг 8.3b: порядок источников и бюджет --------------------
+
+class FakeEngine(FakeSource):
+    """Поисковик теста: семейство `engine`, после капчи «отдыхает» (как `engine_html`)."""
+    adapter = "engine"
+    family = "engine"
+
+    def find(self, query, http):
+        from digger.acquire.sources.base import SourceError
+        if self.entry.options.get("captcha"):
+            self._clock, self._rest_until = (lambda: 0.0), 15 * 60.0
+            raise SourceError("engine.captcha", "captcha", minutes=15)
+        return super().find(query, http)
+
+
+def build_mixed(env, fake, sources, **kw):
+    orch, bus = build(env, fake, sources, **kw)
+    orch.registry._adapters = {"fake": FakeSource, "engine": FakeEngine}
+    return orch, bus
+
+
+def test_sites_of_all_levels_are_asked_before_engines(env):
+    fake = pdf_at(FakeHttp(), env[2], ALL % "a")
+    sources = [dict(source("eng", "catalog", ALL % "x"), adapter="engine"), source("cat", "catalog"),
+               source("late", "russian", ALL % "a")]
+    orch, bus = build_mixed(env, fake, sources, parallel=1, langs=["en"])
+    res = search(orch)
+    asked = [e.source for e in bus.history() if e.key in ("site.search", "engine.query")]
+    assert asked == ["cat", "late", "eng"]                   # сайт последнего уровня — раньше поисковика первого
+    assert res.status == "probable" and res.best.lead.source_id == "late"
+    assert [u for _, u in fake.calls][0] == ALL % "a"        # и его документ скачан раньше, чем ссылка поисковика
+
+
+def test_resting_engine_does_not_spend_query_budget(env):
+    fake = pdf_at(FakeHttp(), env[2], ALL % "a")
+    sources = [dict(source("eng", "search"), adapter="engine", captcha=True), source("cat", "catalog", ALL % "a")]
+    orch, bus = build_mixed(env, fake, sources, parallel=1, langs=["en"])
+    first = search(orch)
+    assert first.queries == 2                                 # сайт и поисковик, получивший капчу
+    res = search(orch, everywhere=True)                       # поисковик отдыхает: в сеть не ходит
+    mine = [e for e in bus.history() if e.source == "eng"][-1]
+    assert mine.key == "engine.captcha" and mine.params["minutes"] == 15
+    assert res.queries == 1 and res.sources == 1
+    assert [f["reason"] for f in res.failures if f["source"] == "eng"] == ["captcha"]
+
+
+def test_site_with_timeout_is_skipped_until_end_of_session(env):
+    import socket
+    fake = pdf_at(FakeHttp(), env[2], ALL % "a")
+    fake.add_error("https://a.example/find", socket.timeout("timed out"))
+    sources = [source("a", "one", open="https://a.example/find"), source("s2", "two", ALL % "a")]
+    orch, bus = build(env, fake, sources)
+    first = search(orch, everywhere=True)
+    assert [f["reason"] for f in first.failures] == ["read_timeout"]
+    calls = len([u for _, u in fake.calls if "a.example" in u])
+    res = search(orch, everywhere=True)
+    assert len([u for _, u in fake.calls if "a.example" in u]) == calls        # к сайту больше не обращались
+    skips = [e for e in bus.history() if e.key == "site.slow_skip"]
+    assert len(skips) == 1 and skips[0].params["site"] == "a.example" and skips[0].source == "a"
+    assert res.queries == 1 and res.status == "probable"      # второй источник спрошен и дал документ
+    assert [(f["site"], f["cls"], f["reason"]) for f in res.failures] == [("a.example", "transient", "read_timeout")]
+
+
+def test_lead_to_slow_site_is_not_followed(env):
+    fake = pdf_at(FakeHttp(), env[2], ALL % "a")
+    orch, bus = build(env, fake, [source("s1", "one", "https://www.alldatasheet.com/slow.pdf", ALL % "a")])
+    orch._slow["alldatasheet.com"] = "read_timeout"
+    res = search(orch)
+    assert res.downloads == 0 and fake.calls == [] and res.status == "not_found"
+    assert keys(bus).count("site.slow_skip") == 1             # один раз за поиск, а не на каждую ссылку
+    assert res.conclusion is not None

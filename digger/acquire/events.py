@@ -39,6 +39,7 @@ KEYS = {
     "engine.no_key": "skip", "engine.captcha": "skip", "engine.quota": "fail",
     "engine.error": "fail", "engine.offtopic": "fail",
     "site.search": "", "site.found": "found", "site.found_pdf": "found", "site.empty": "empty",
+    "site.slow_skip": "skip",
     "market.search": "", "market.found": "found", "market.empty": "empty",
     "crawl.found": "found", "crawl.empty": "empty",
     "fetch.start": "", "fetch.progress": "", "fetch.done": "ok", "fetch.failed": "fail",

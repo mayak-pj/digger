@@ -26,6 +26,7 @@
   "site.found": "Searching {site} — {n:match|matches} found",
   "site.found_pdf": "Searching {site} — {n:part|parts} found, {pdfs} PDF",
   "site.empty": "Searching {site} — nothing found",
+  "site.slow_skip": "{site} did not answer in time — skipped until restart",
 
   "market.search": "Searching marketplaces: {site}…",
   "market.found": "Searching marketplaces: {site} — {n:item|items} found, {pdfs:PDF link|PDF links}",

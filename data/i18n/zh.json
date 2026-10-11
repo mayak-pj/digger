@@ -26,6 +26,7 @@
   "site.found": "正在搜索 {site} — 找到 {n} 条匹配",
   "site.found_pdf": "正在搜索 {site} — 找到 {n} 个型号，{pdfs} 份 PDF",
   "site.empty": "正在搜索 {site} — 未找到",
+  "site.slow_skip": "{site} 响应超时 — 重启前跳过",
 
   "market.search": "正在搜索电商平台：{site}…",
   "market.found": "正在搜索电商平台：{site} — 找到 {n} 件商品，{pdfs} 条 PDF 链接",

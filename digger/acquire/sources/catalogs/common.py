@@ -70,7 +70,7 @@ class CatalogSite(SourceAdapter):
         except Exception as e:
             detail = str(e) or type(e).__name__
             log.warning("%s: %s", self.id, detail)
-            raise SourceError("engine.error", detail)
+            raise SourceError("engine.error", detail, cause=e)
         page = reply["body"].decode("utf-8", errors="replace")
         if is_blocked(reply["status"], page):
             self._rest_until = self._clock() + REST_MINUTES * 60

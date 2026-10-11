@@ -6,6 +6,9 @@
 → библиотека». Остановка: документ подтверждён (§4.5), исчерпан бюджет, отмена; «искать везде» остановку по
 результату пропускает, бюджет — нет. Порядок уровней и источников внутри уровня — по умолчанию из `sources.json`
 или адаптивный, по статистике (`adaptive.py`, §4.10); ранжирование ссылок от него не зависит.
+Уровни проходятся дважды: сначала сайты (каталоги, производители — по одному запросу), потом поисковики и
+запросы через них — бюджет запросов не кончается раньше, чем спрошены сайты. Сайт, не ответивший вовремя
+(тайм-аут), до конца сеанса (жизни оркестратора) пропускается: событие `site.slow_skip`, неудача — в заключение.
 Ход — только событиями (§4.8). Запросы считаются по событиям шины,
 неудачи доступа (`access.*` и капча поисковика, §4.11) собираются в `SearchResult.failures`; если документ не
 подтверждён, из них строится заключение (`conclusion.py`): где скачать вручную, что закрыто сетью.
@@ -30,7 +33,7 @@ from .decide import decide
 from .events import Event, EventBus
 from .fetch import fetch_to_quarantine
 from .models import AcquisitionRecord, Lead, PhotoContext
-from .netdiag import SITE_PROTECTED, BlockTracker, failure_class
+from .netdiag import SITE_PROTECTED, TRANSIENT, BlockTracker, failure_class
 from .query import DEFAULT_ORDER, Query, base_part, is_smd_code, plan_queries
 from .rank import normalize_url, score_lead
 from .stats import QUERY_KEYS
@@ -42,6 +45,8 @@ log = logging.getLogger("digger.acquire.orchestrator")
 LEADS_PER_LEVEL = 4       # сколько лучших ссылок уровня проверяется, прежде чем идти на следующий
 PDFS_PER_PAGE = 2         # сколько PDF берётся с одной страницы
 PARALLEL = 3              # сколько источников уровня спрашивается одновременно (§4.6)
+SEARCH_FAMILIES = ("engine", "queries")     # ищут через поисковики: много запросов, поэтому после сайтов
+SLOW_REASONS = ("read_timeout", "connect_timeout")     # после такой неудачи сайт пропускается до конца сеанса
 _ORDER = {"confirmed": 3, "probable": 2, "needs_user": 1, "rejected": 0}
 
 
@@ -67,6 +72,11 @@ class SearchResult:
     downloads: int = 0
     sources: int = 0
     seconds: float = 0.0
+
+
+def _site(host: str) -> str:
+    """Сайт по имени узла или домену источника: `www.datasheetarchive.com` → `datasheetarchive.com`."""
+    return confirm_mod.site_of("//" + host) or host.lower()
 
 
 def _raw(rec: AcquisitionRecord) -> AcquisitionRecord:
@@ -99,6 +109,7 @@ class Orchestrator:
         self.clock = clock
         self.parallel = max(1, int(parallel))
         registry.on_failure = self._failed             # неудача доступа внутри источника (поисковик)
+        self._slow: Dict[str, str] = {}                # сайт → причина: не ответил вовремя, до конца сеанса не ждём
         self._cancel = threading.Event()
         self._state = threading.Lock()                 # причина остановки: её проверяют потоки источников
         self.sleep = sleep or self._cancel.wait        # пауза между повторами прерывается отменой
@@ -113,6 +124,7 @@ class Orchestrator:
         self._cancel.clear()
         self._ctx, self._res = ctx, SearchResult(part=ctx.part or ctx.marking)
         self._asked, self._seen, self._url, self._why = set(), set(), "", ""
+        self._skipped = set()                          # медленные сайты, о пропуске которых в этом поиске уже сказано
         self._started = self.clock()
         self._sites = {en.id: en.domains[0] for en in self.registry.entries(include_disabled=True) if en.domains}
         if self.recorder is not None:
@@ -144,6 +156,8 @@ class Orchestrator:
                                        "source": e.source, "level": e.level})
             if self.access is not None:
                 self.access.record_failure(site, cls, self._res.part, url, e.level)
+            if site and self.tracker.reason(site) in SLOW_REASONS:
+                self._slow.setdefault(_site(site), self.tracker.reason(site))
         elif e.key == "engine.captcha":           # поисковик с капчей: человек в браузере искать может
             self._res.failures.append({"site": self._sites.get(e.source, e.source), "cls": SITE_PROTECTED,
                                        "reason": "captcha", "url": "", "source": e.source, "level": e.level})
@@ -182,30 +196,37 @@ class Orchestrator:
         order = [lv["id"] for lv in self.registry.levels()]
         base = base_part(ctx.part)
         adapters = {level: self.registry.build(level) for level in order}
-        for level in self._order(order, adapters):
-            leads = self._ask(adapters[level], plan)
-            fresh = []
-            for lead in leads:
-                key = normalize_url(lead.url)
-                if key not in self._seen:
-                    self._seen.add(key)
-                    lead.rank_score = score_lead(lead, ctx.part, order, self.trust.makers, base)
-                    fresh.append(lead)
-            for lead in sorted(fresh, key=lambda x: -x.rank_score)[:LEADS_PER_LEVEL]:
-                if self._stop():
+        levels = self._order(order, adapters)
+        for direct in (True, False):         # сначала сайты, потом поисковики: бюджет не кончается до сайтов
+            for level in levels:
+                group = [a for a in adapters[level] if (a.family not in SEARCH_FAMILIES) == direct]
+                if group and self._round(group, plan, order, base, everywhere):
                     return
-                try:
-                    confirmed = self._follow(lead)
-                except Exception as e:       # noqa: BLE001
-                    log.exception("ссылка %s", lead.url)
-                    self._emit("error.internal", "ru", lead.level, lead.source_id, stage="document",
-                               error=str(e) or type(e).__name__)
-                    continue
-                if confirmed and not everywhere:
-                    self._why = "confirmed"
-                    return
+
+    def _round(self, group: List[Any], plan: List[Query], order: List[str], base: str, everywhere: bool) -> bool:
+        """Источники одного уровня → лучшие новые ссылки → документы. Истина — поиск пора остановить."""
+        ctx = self._ctx
+        fresh = []
+        for lead in self._ask(group, plan):
+            key = normalize_url(lead.url)
+            if key not in self._seen:
+                self._seen.add(key)
+                lead.rank_score = score_lead(lead, ctx.part, order, self.trust.makers, base)
+                fresh.append(lead)
+        for lead in sorted(fresh, key=lambda x: -x.rank_score)[:LEADS_PER_LEVEL]:
             if self._stop():
-                return
+                return True
+            try:
+                confirmed = self._follow(lead)
+            except Exception as e:       # noqa: BLE001
+                log.exception("ссылка %s", lead.url)
+                self._emit("error.internal", "ru", lead.level, lead.source_id, stage="document",
+                           error=str(e) or type(e).__name__)
+                continue
+            if confirmed and not everywhere:
+                self._why = "confirmed"
+                return True
+        return self._stop()
 
     # -------------------- источники --------------------
     def _order(self, order: List[str], adapters: Dict[str, List[Any]]) -> List[str]:
@@ -252,6 +273,9 @@ class Orchestrator:
     def _discover(self, adapter: Any, plan: List[Query]) -> List[Lead]:
         leads: List[Lead] = []
         answered = set()              # языки, на которых источник уже дал ссылки
+        if adapter.domains and self._slow_site(adapter.domains[0], adapter.level, adapter.id,
+                                               adapter.lang or self.langs[0]):
+            return leads
         for query in self._queries(adapter, plan):
             if query.lang in answered:
                 continue
@@ -279,10 +303,27 @@ class Orchestrator:
             self._emit("access." + cls, lang, adapter.level, adapter.id, site=site)
         return bool(cls)
 
+    def _slow_site(self, host: str, level: str, source: str, lang: str, url: str = "") -> bool:
+        """Сайт уже не ответил вовремя в этом сеансе: не ждём его снова (событие и неудача — раз за поиск)."""
+        site = _site(host)
+        reason = self._slow.get(site)
+        if not reason:
+            return False
+        with self._state:
+            told = site in self._skipped
+            self._skipped.add(site)
+        if not told:
+            self._emit("site.slow_skip", lang, level, source, site=site)
+            self._res.failures.append({"site": site, "cls": TRANSIENT, "reason": reason, "url": url,
+                                       "source": source, "level": level})
+        return True
+
     # -------------------- документ --------------------
     def _follow(self, lead: Lead) -> bool:
         """Ссылка → PDF (со страницы — до `PDFS_PER_PAGE`) → проверка. Истина — документ подтверждён."""
         self._url = lead.url
+        if self._slow_site(host_of(lead.url), lead.level, lead.source_id, lead.language or "en", lead.url):
+            return False
         pdfs = crawl(self.http, lead, self.bus, cancelled=self._cancel.is_set, tracker=self.tracker)
         confirmed = False
         for pdf in pdfs[:PDFS_PER_PAGE]:
@@ -301,6 +342,8 @@ class Orchestrator:
         kw = dict(lang=lead.language or "en", level=lead.level, source=lead.source_id)
         site = host_of(lead.url)
         self._url = lead.url
+        if self._slow_site(site, lead.level, lead.source_id, kw["lang"], lead.url):
+            return False
         if not self.http.is_allowed(lead.url):       # в заключение, бюджет скачиваний не тратится
             self._emit("access.not_whitelisted", site=site, **kw)
             return False

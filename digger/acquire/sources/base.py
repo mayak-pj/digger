@@ -92,6 +92,12 @@ class SourceAdapter:
         parts = list(self.key.values()) if isinstance(self.key, dict) else [self.key]
         return bool(parts) and all(parts)
 
+    def resting(self) -> int:
+        """Сколько минут источнику ещё «отдыхать» после капчи (`_rest_until` по часам `_clock`); 0 — можно спрашивать."""
+        until = getattr(self, "_rest_until", 0.0)
+        left = until - self._clock() if until else 0.0
+        return int(-(-left // 60)) if left > 0 else 0
+
     def find(self, query: Any, http: Any) -> List[Lead]:
         """Один запрос к источнику. `query` — `Query` или строка; `http` — `SafeHttp`."""
         raise NotImplementedError
@@ -107,6 +113,10 @@ class SourceAdapter:
         params = {"engine": self.label, "site": self.label, "query": text}
         if not self.available:
             self._emit("engine.no_key", lang, params)
+            return []
+        left = self.resting()
+        if left:                          # в сеть не ходим — это не запрос: бюджет поиска не тратится
+            self._emit("engine.captcha", lang, dict(params, detail="отдых", minutes=left))
             return []
         self._emit(_START.get(self.family, self.family + ".search"), lang, params)
         try:
