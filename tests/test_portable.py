@@ -141,3 +141,30 @@ def test_build_ships_photos_folder_and_visit_guide(tmp_path):
     bat = bp.BATS["Проверка на работе.bat"]
     assert "%~dp0фото" in bat and "5-15 минут" not in bat
     bp.bat_bytes(bat)        # текст укладывается в кодировку cmd.exe
+
+
+def test_build_ships_demo_guide_matching_the_program(tmp_path):
+    """Шаг 8.3f: инструкция для показа лежит в корне сборки и называет то, что есть в программе."""
+    from digger.acquire.decide import DEFAULT_THRESHOLDS
+    from digger.acquire.orchestrator import Budget
+    from digger.acquire.trial import CHIPS
+    bp.make_visit_files(str(tmp_path))
+    raw = (tmp_path / bp.DEMO_GUIDE).read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf") and b"\r\n" in raw              # Блокнот Win7: BOM и CRLF
+    demo = raw.decode("utf-8-sig")
+    for chip in CHIPS:
+        assert chip in demo
+    with open(os.path.join(bp.ROOT, "digger", "gui", "main_window.py"), encoding="utf-8") as f:
+        window = f.read()
+    for label in (u"Быстрый поиск", u"Полный поиск", u"Сохранить отчёт", u"Сводка CSV", u"Подтвердить", u"Отклонить",
+                  u"Проверить свой PDF", u"Открыть PDF", u"Открыть папку библиотеки", u"Не найдено: где смотреть"):
+        assert label in demo and label in window, label
+    b = Budget()
+    assert u"%d запросов, %d скачиваний" % (b.queries, b.downloads) in demo and b.seconds == 180
+    assert u"%d баллов" % DEFAULT_THRESHOLDS["confirmed"] in demo and u"от %d" % DEFAULT_THRESHOLDS["probable"] in demo
+    for fn in ("stm32.png", "at24c02.png", "w25q64_rot.png", "lm358_180.png"):
+        assert fn in demo and os.path.isfile(os.path.join(bp.ROOT, "tests", "samples", fn))
+    from digger.gui.main_window import DEMO_GUIDE, demo_guide_path
+    assert DEMO_GUIDE == bp.DEMO_GUIDE and u"Как показать программу" in window       # пункт меню «Справка»
+    assert demo_guide_path(str(tmp_path)) == str(tmp_path / bp.DEMO_GUIDE)
+    assert demo_guide_path(bp.ROOT) == os.path.join(bp.ROOT, "docs", "DEMO.md")

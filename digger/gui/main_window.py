@@ -36,6 +36,7 @@ PREVIEW = (1280, 960)    # фото для карточки читается н�
 PREVIEW_CACHE = 16
 
 
+DEMO_GUIDE = "КАК ПОКАЗАТЬ ПРОГРАММУ.txt"      # имя файла в сборке (`tools/build_portable.py`)
 CARD_HEIGHT = 330             # высота карточки чипа при запуске; границу можно двигать
 REPORT_MIN_HEIGHT = 170       # столько заключения о памяти видно всегда, даже под таблицей сайтов
 WEB_TIP = ("Быстрый поиск datasheet: сначала локальная база, потом интернет (каталоги, сайты производителей,\n"
@@ -130,6 +131,7 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         m = mb.addMenu("Справка")
         m.addAction("Инструкция (README)", lambda: self._open_path(os.path.join(self.app_dir, "README.md")))
+        m.addAction("Как показать программу", lambda: self._open_path(demo_guide_path(self.app_dir)))
         m.addAction("Модули", self.show_modules)
         self.menus = {a.text(): a.menu() for a in mb.actions() if a.menu()}
 
@@ -1182,6 +1184,12 @@ class MainWindow(QMainWindow):
             for mod in self.ctx.modules.values():
                 mod.close()
         e.accept()
+
+
+def demo_guide_path(app_dir: str) -> str:
+    """Инструкция для показа: в сборке — текст в корне папки программы, в исходниках — `docs/DEMO.md`."""
+    built = os.path.join(app_dir, DEMO_GUIDE)
+    return built if os.path.isfile(built) else os.path.join(app_dir, "docs", "DEMO.md")
 
 
 def qt_plugins_dir() -> str:

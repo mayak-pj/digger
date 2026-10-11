@@ -144,6 +144,7 @@ def check_files():
 PHOTOS_DIR = "фото"
 PHOTOS_NOTE = "ПОЛОЖИТЕ ФОТО СЮДА.txt"
 VISIT_GUIDE = "ИНСТРУКЦИЯ ДЛЯ ВЫЕЗДА.txt"
+DEMO_GUIDE = "КАК ПОКАЗАТЬ ПРОГРАММУ.txt"       # docs/DEMO.md: сценарий показа на эталонных чипах (шаг 8.3f)
 NOTES_FILE = "впечатления.txt"
 NOTES_TEXT = ("Впечатления от программы (Win7). Пишите своими словами, коротко; файл сам попадёт в отчёт.\n"
               "Что смотреть - в «ИНСТРУКЦИЯ ДЛЯ ВЫЕЗДА.txt», раздел «ЧТО ПОСМОТРЕТЬ ГЛАЗАМИ».\n\n"
@@ -169,6 +170,10 @@ def make_visit_files(app):
         guide = f.read()
     with open(os.path.join(app, VISIT_GUIDE), "w", encoding="utf-8-sig", newline="\r\n") as f:
         f.write(guide)
+    with open(os.path.join(ROOT, "docs", "DEMO.md"), encoding="utf-8") as f:
+        demo = f.read()
+    with open(os.path.join(app, DEMO_GUIDE), "w", encoding="utf-8-sig", newline="\r\n") as f:     # Блокнот Win7
+        f.write(demo)
 
 
 def bat_bytes(text):
