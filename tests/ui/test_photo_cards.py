@@ -146,7 +146,12 @@ def test_window_states_from_report_and_after_failure(window, tmp_path, monkeypat
     w._analyzed((paths[0], _report(paths[0], "NE555", "?"), []))                       # документа нет
     w._analyzed((paths[1], _report(paths[1], "NE555", "?", datasheet="ne555.pdf"), []))  # документ есть, вывода нет
     w._analyzed((paths[2], _report(paths[2]), []))                                     # маркировка не прочитана
-    assert [w.photos.status(p)[0] for p in paths] == ["not_found", "unknown", "unread", "new"]
+    assert [w.photos.status(p)[0] for p in paths] == ["no_local", "unknown", "unread", "new"]
+    w.list.setCurrentRow(0)                        # «нет в базе»: в интернете ещё не искали — подсказка об этом
+    assert w.card.tag.text() == u"нет в базе" and u"ещё не искали" in w.card.tag.toolTip()
+    w.items[paths[0]]["report"].web_searched = True
+    w._mark_item(paths[0])                         # после поиска в интернете без результата — «не найдено»
+    assert w.photos.status(paths[0])[0] == "not_found" and w.card.tag.text() == u"не найдено"
 
     def broken(path, progress=None, marking_override="", ocr_mode=""):
         raise RuntimeError(u"сбой распознавания")
@@ -155,3 +160,37 @@ def test_window_states_from_report_and_after_failure(window, tmp_path, monkeypat
     w.run_selected()
     _pump(app, lambda: w.is_idle() and u"сбой распознавания" in w.log_view.toPlainText())
     assert w.photos.status(paths[3]) == ("new", "")          # метка «распознаю…» не осталась висеть
+
+
+def test_one_settings_one_stop_and_search_buttons_in_card(window, tmp_path, monkeypatch):
+    """Шаг 8.3c: «Настройки» и «Стоп» — по одному; кнопки поиска есть в карточке, «Следующее» листает список."""
+    w, app = window
+    texts = [a.text() for a in w.toolbar.actions()]
+    menu = [a.text() for top in w.menuBar().actions() for a in ([top] + (top.menu().actions() if top.menu() else []))]
+    assert texts.count(u"Настройки") == 1 and not [t for t in menu if t.startswith(u"Настройки")]
+    assert texts.count(u"Стоп") == 1 and w.search_feed.b_stop.isHidden()
+    assert u"Искать везде" not in texts and u"Искать на всех сайтах" in texts
+    assert u"локальная база" in w.a_web.toolTip() and w.card.b_web.toolTip() == w.a_web.toolTip()
+
+    a, b = [os.path.normpath(_png(str(tmp_path / ("n%d.png" % i)))) for i in range(2)]
+    w.add_files([a, b])
+    _pump(app, lambda: w.list.count() == 2 and w.is_idle())
+    w._analyzed((a, _report(a, "NE555", "?"), []))
+    w._analyzed((b, _report(b, "LM358", "?"), []))
+    asked = []
+
+    def search(r, progress=None, cancel=None, levels=None):
+        asked.append((r.chosen_part, levels))
+        r.web_searched = True
+    monkeypatch.setattr(w.pipe, "search_web", search)
+    w.list.setCurrentRow(0)
+    w.card.b_web.click()
+    _pump(app, lambda: w.is_idle() and len(asked) == 1)
+    assert w.photos.status(a)[0] == "not_found" and w.card.b_web.isEnabled()
+    w.card.b_next.click()
+    assert w.current_path() == b
+    w.card.b_web_all.click()
+    _pump(app, lambda: w.is_idle() and len(asked) == 2)
+    assert asked == [("NE555", None), ("LM358", ["all"])]
+    w.card.b_next.click()                          # последнее фото: остаёмся на нём
+    assert w.current_path() == b

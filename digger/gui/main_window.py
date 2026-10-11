@@ -36,6 +36,11 @@ PREVIEW = (1280, 960)    # фото для карточки читается н�
 PREVIEW_CACHE = 16
 
 
+WEB_TIP = ("Сначала локальная база, потом интернет: каталоги, сайты производителей, поисковики —\n"
+           "до первого подтверждённого datasheet")
+WEB_ALL_TIP = ("Интернет: пройти все источники, не останавливаясь на первом найденном документе\n"
+               "(дольше; когда обычный поиск ничего не подтвердил)")
+
 class MainWindow(QMainWindow):
     ext_failed = pyqtSignal(str)      # расширение отключилось (может прийти из фонового потока)
     search_events = pyqtSignal(list)  # события шины пачкой, не чаще ~30 раз в секунду (для ленты поиска)
@@ -91,8 +96,8 @@ class MainWindow(QMainWindow):
             return a
         act("Добавить фото…", "image-plus", self.add_files_dialog)
         self.a_run = act("Распознать", "scan-text", self.run_selected, "Распознать выбранные (или все новые) фото")
-        self.a_web = act("Искать в интернете", "search", lambda: self.web_search(None), "Поиск по уровням до первых хороших результатов")
-        self.a_web_all = act("Искать везде", "globe", lambda: self.web_search(["all"]), "Пройти все уровни поиска")
+        self.a_web = act("Искать в интернете", "search", lambda: self.web_search(None), WEB_TIP)
+        self.a_web_all = act("Искать на всех сайтах", "globe", lambda: self.web_search(["all"]), WEB_ALL_TIP)
         self.a_stop = act("Стоп", "square", self.stop_job)
         tb.addSeparator()
         act("Сохранить отчёт", "file-text", self.save_report)
@@ -105,8 +110,6 @@ class MainWindow(QMainWindow):
         m.addAction("Сохранить отчёт (HTML)…", self.save_report)
         m.addAction("Сводка по всем фото (CSV для Excel)…", self.save_summary)
         m.addSeparator()
-        a = m.addAction("Настройки…", self.settings)
-        a.setMenuRole(QAction.NoRole)            # на Mac Qt иначе уносит «Настройки» в меню приложения
         m.addAction("Выход", self.close)
         m = mb.addMenu("База")
         m.addAction("Индексировать папки с datasheet", self.index_db)
@@ -120,8 +123,6 @@ class MainWindow(QMainWindow):
         m.addAction("Журнал сетевых обращений", lambda: self._open_path(
             os.path.join(resolve_path(self.app_dir, self.ctx.config["paths"]["log_dir"]), "network_audit.log")))
         m.addAction("Папка карантина", lambda: self._open_path(resolve_path(self.app_dir, self.ctx.config["paths"]["quarantine_dir"])))
-        a = mb.addAction("Настройки…", self.settings)
-        a.setMenuRole(QAction.NoRole)
         m = mb.addMenu("Расширения")
         m.addAction("Управление расширениями…", self.show_extensions)
         m.addSeparator()
@@ -169,6 +170,11 @@ class MainWindow(QMainWindow):
         self.card.b_apply.clicked.connect(self.apply_chip)
         self.photos.dataChanged.connect(self._update_header)
         self.card.user_edit.connect(self._follow_off)
+        self.card.b_web.clicked.connect(lambda: self.web_search(None))
+        self.card.b_web_all.clicked.connect(lambda: self.web_search(["all"]))
+        self.card.b_next.clicked.connect(self.next_photo)
+        self.card.b_web.setToolTip(WEB_TIP)
+        self.card.b_web_all.setToolTip(WEB_ALL_TIP)
 
         self.tabs = QTabWidget()
         self.report_view = QTextBrowser()
@@ -266,7 +272,7 @@ class MainWindow(QMainWindow):
         bl = QVBoxLayout(lower)
         bl.setContentsMargins(0, 0, 0, 0)
         bl.setSpacing(gap * 2)
-        self.search_feed = self.feed_slot = SearchFeed(self.theme)
+        self.search_feed = self.feed_slot = SearchFeed(self.theme, stop_button=False)    # «Стоп» один — на панели
         self.search_events.connect(self.search_feed.add_events)
         self.search_feed.stop_requested.connect(self.stop_job)
         bl.addWidget(self.search_feed)
@@ -359,7 +365,7 @@ class MainWindow(QMainWindow):
         self.busy.setVisible(busy)
         self.a_stop.setEnabled(busy)
         self.search_feed.set_running(busy)
-        for a in (self.a_run, self.a_web, self.a_web_all):
+        for a in (self.a_run, self.a_web, self.a_web_all, self.card.b_web, self.card.b_web_all):
             a.setEnabled(not busy)
 
     def start_job(self, fn, on_done, *args, **kwargs):
@@ -580,7 +586,7 @@ class MainWindow(QMainWindow):
         elif not r.chosen_part:
             state = "unread"
         else:
-            state = "unknown" if r.datasheet_path else "not_found"
+            state = "unknown" if r.datasheet_path else "not_found" if r.web_searched else "no_local"
         self.photos.set_status(path, state, r.chosen_part or "")
 
     def web_search(self, levels):
@@ -822,6 +828,13 @@ class MainWindow(QMainWindow):
             return self.pipe.check_own_pdf(r, p, progress)
         if self.start_job(work, lambda rec: rec is not None and (self._doc_changed(r, rec), self.tabs.setCurrentWidget(self.why_view))):
             self._working(self.current_path(), "search")
+
+    def next_photo(self):
+        """Кнопка карточки «Следующее»: выбрать следующее фото списка (на последнем — остаться)."""
+        row = self.list.currentIndex().row() + 1
+        if 0 < row < self.photos.rowCount():
+            self._follow_off()
+            self.list.setCurrentIndex(self.photos.index(row))
 
     def find_for_all(self):
         """Поиск в интернете для каждого распознанного фото с партномером — по очереди, как «Распознать»."""

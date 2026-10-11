@@ -26,7 +26,7 @@ from typing import Any, Callable, Dict, List, Optional
 log = logging.getLogger(__name__)
 
 LANGS = ("en", "zh", "ru")
-LANG_LABELS = {"en": "EN", "zh": "中文", "ru": "RU"}
+LANG_LABELS = {"en": "EN", "zh": "CH", "ru": "RU"}
 OUTCOMES = ("", "ok", "empty", "found", "fail", "skip")       # "" — этап ещё идёт
 I18N_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "i18n")
 

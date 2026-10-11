@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (QComboBox, QFormLayout, QFrame, QHBoxLayout, QLabel
 
 from ..ui import theme as ui_theme
 from ..ui.theme.tokens import SPACE
-from .models import PHOTO_STATES
+from .models import PHOTO_STATES, STATE_TIPS
 from .photo_list import draw_tag
 
 PACKAGES = ["", "SOP-8", "SOIC-8", "DIP-8", "TSSOP-8", "MSOP-8", "SOT-23-5", "SOT-23-6", "DFN-8", "WSON-8",
@@ -204,6 +204,15 @@ class ChipCard(QFrame):
         self.b_apply = QPushButton(u"Применить")
         self.b_apply.setToolTip(u"Сверить с datasheet заново с этим корпусом и числом выводов")
         form.addRow(u"Корпус:", row(self.pkg_box, self.pins, self.b_apply))
+        self.b_web = QPushButton(theme.icon("search"), u"В интернете")
+        self.b_web_all = QPushButton(theme.icon("globe"), u"Все сайты")
+        self.b_next = QPushButton(theme.icon("skip-forward"), u"Далее")
+        self.b_next.setToolTip(u"Перейти к следующему фото в списке")
+        search = QHBoxLayout()           # кнопки равной ширины: подписи не обрезаются в узкой колонке
+        search.setSpacing(t["space_sm"])
+        for b in (self.b_web, self.b_web_all, self.b_next):
+            search.addWidget(b, 1)
+        form.addRow(u"Искать:", search)
         col.addLayout(form)
         col.addStretch(1)
         body.addWidget(self.fields)
@@ -229,4 +238,5 @@ class ChipCard(QFrame):
         self.title.setText(title)
         self.title.setToolTip(tip)
         self.tag.set_state(state)
+        self.tag.setToolTip(STATE_TIPS.get(state, ""))
         self.package.setText(u" · ".join(x for x in (package, u"выводов: %d" % pins if pins else "") if x))

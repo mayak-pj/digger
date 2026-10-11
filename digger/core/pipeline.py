@@ -100,6 +100,7 @@ class ChipPipeline:
             from .models import Candidate
             cands = [Candidate(part=r.chosen_part, score=1.0, reason="введено вручную")]
         hits = self.m["web_search"].search(cands, progress=progress, cancel=cancel, levels=levels)
+        r.web_searched = True
         r.records = list(getattr(self.m["web_search"], "last_records", []))
         r.conclusion = getattr(self.m["web_search"], "last_conclusion", None)
         known = set(h.location for h in r.hits)

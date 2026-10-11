@@ -62,7 +62,7 @@ def test_feed_shows_language_text_counters_and_history(qapp):
     assert feed.badge.text() == "EN" and feed.line.text().startswith("DuckDuckGo")
     assert u"идёт поиск" in feed.line.toolTip()           # подсказка — русский перевод
     feed.add_events(events[6:9])
-    assert feed.badge.text() == u"中文" and feed.line.text().startswith(u"百度搜索")
+    assert feed.badge.text() == u"CH" and feed.line.text().startswith(u"百度搜索")
     assert feed.counters.text() == u"3 запроса · найдено 13 · скачано 0 · подтверждено 0"
     feed.add_events(events[9:])                           # итог поиска — по-русски, на каком бы языке он ни шёл
     assert feed.badge.text() == "RU" and u"ПОДТВЕРЖДЁН" in feed.line.text()
@@ -162,11 +162,12 @@ def test_window_feed_follows_search_and_stop_works(window, tmp_path, monkeypatch
     w.web_search(None)
     _pump(app, lambda: feed.model.rowCount() == 10)
     assert not feed.isHidden() and feed.b_stop.isEnabled()
-    assert feed.badge.text() == u"中文" and feed.line.text().startswith(u"正在从 szlcsc.com 下载")
+    assert feed.badge.text() == u"CH" and feed.line.text().startswith(u"正在从 szlcsc.com 下载")
     assert feed.model.groups() == [("local", 1), ("catalog", 1), ("search", 2), ("china", 2)]   # прежняя история убрана
     assert u"Сайты-каталоги datasheet" in [feed.model.index(i).data() for i in range(feed.model.rowCount())]
     assert feed.counters.text().startswith(u"3 запроса · найдено 13")
-    feed.b_stop.click()                                   # «Стоп» в ленте — тот же «Стоп», что на панели
+    assert feed.b_stop.isHidden()                         # в окне «Стоп» один — на панели действий
+    w.a_stop.trigger()
     assert w.job.cancel.cancelled
     gate.set()
     _pump(app, lambda: w.is_idle() and not w.job.isRunning())

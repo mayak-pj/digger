@@ -144,6 +144,7 @@ class ChipReport:
     memory: Optional[MemoryVerdict] = None
     log: List[str] = field(default_factory=list)
     conclusion: Any = None    # `acquire.conclusion.Conclusion` последнего поиска без подтверждённого документа (§4.11)
+    web_searched: bool = False   # по чипу уже искали в интернете (метка «не найдено» вместо «нет в базе»)
     records: List[Any] = field(default_factory=list)   # записи поиска (`AcquisitionRecord`) для вкладок «Документы» и «Почему»
 
     def to_dict(self) -> Dict[str, Any]:

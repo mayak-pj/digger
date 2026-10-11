@@ -136,9 +136,9 @@ def test_row_text_time_icon_language_and_russian_tooltip(qapp):
     m.add(_search())
     by_text = {m.index(i).data(TEXT_ROLE): m.index(i) for i in range(m.rowCount()) if m.index(i).data(TEXT_ROLE)}
     zh = by_text[u"百度搜索：「W25Q64JV 数据手册」— 找到 5 条结果"]
-    assert zh.data(LANG_ROLE) == u"中文" and zh.data(STATE_ROLE) == "found"
+    assert zh.data(LANG_ROLE) == u"CH" and zh.data(STATE_ROLE) == "found"
     assert re.match(u"^\\d\\d:\\d\\d:\\d\\d$", zh.data(TIME_ROLE))
-    assert re.match(u"^\\d\\d:\\d\\d:\\d\\d ✔ 中文 百度搜索", zh.data())
+    assert re.match(u"^\\d\\d:\\d\\d:\\d\\d ✔ CH 百度搜索", zh.data())
     assert zh.data(0x3) == u"百度: «W25Q64JV 数据手册» — найдено 5 ссылок"          # Qt.ToolTipRole — русский перевод
     en = by_text["Google query: \"%s\" — no API key, skipped" % Q_EN]
     assert en.data(LANG_ROLE) == "EN" and en.data(STATE_ROLE) == "skip" and u"нет ключа API" in en.data(0x3)

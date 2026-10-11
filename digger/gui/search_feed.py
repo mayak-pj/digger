@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Живая лента поиска (ARCHITECTURE §4.8, §5): строка состояния на языке поиска и история по уровням.
 
-Сверху — метка языка EN/中文/RU, текст последнего события (сменяется плавно), счётчики, «Стоп»; под ней —
+Сверху — метка языка EN/CH/RU, текст последнего события (сменяется плавно), счётчики, «Стоп»; под ней —
 история (`FeedModel`): время, значок итога, язык, текст; русский перевод — в подсказке. События приходят
 пачками из потока окна (`MainWindow.search_events`); здесь нет ни диска, ни сети.
 """
@@ -36,7 +36,7 @@ def _font(base: QFont, token: str, bold: bool = False) -> QFont:
 
 
 class LangBadge(QWidget):
-    """Метка языка текущего поиска: EN · 中文 · RU. Ширина постоянная — текст рядом не прыгает."""
+    """Метка языка текущего поиска: EN · CH · RU. Ширина постоянная — текст рядом не прыгает."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -188,7 +188,7 @@ class SearchFeed(QFrame):
     """Лента поиска под карточкой чипа. Скрыта, пока нет ни одного события."""
     stop_requested = pyqtSignal()
 
-    def __init__(self, theme, parent=None):
+    def __init__(self, theme, parent=None, stop_button: bool = True):
         super().__init__(parent)
         self.setObjectName("searchFeed")
         t = theme.t
@@ -217,7 +217,11 @@ class SearchFeed(QFrame):
         head.addWidget(self.line, 1)
         head.addWidget(self.counters)
         head.addWidget(self.b_history)
-        head.addWidget(self.b_stop)
+        if stop_button:                  # в главном окне «Стоп» один — на панели действий
+            head.addWidget(self.b_stop)
+        else:
+            self.b_stop.setParent(self)
+            self.b_stop.hide()
         root.addLayout(head)
 
         self.view = QListView()

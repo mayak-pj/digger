@@ -243,7 +243,7 @@ def test_cli_status_line_in_place_and_history():
     history = [ln for ln in lines if ln.strip()]
     assert len(history) == 6                                      # «идёт…» в историю не попадает, только итоги
     assert re.search(r"^\d\d:\d\d:\d\d ✔ EN   DuckDuckGo query: .* — 7 links found$", history[1])
-    assert re.search(r"✔ 中文 百度搜索", history[2])
+    assert re.search(r"✔ CH +百度搜索", history[2])
     assert re.search(r"⤼ RU   Яндекс: «W25Q64JV даташит» — капча", history[3])
     assert re.search(r"✔ RU   итог: ПОДТВЕРЖДЁН", history[4])
     assert "14" in history[5]                                     # счётчики
@@ -275,4 +275,4 @@ def test_cli_plain_output_when_not_a_terminal():
 def test_cli_demo_runs(capsys):
     assert search_cli.main(["--demo", "--fast"]) == 0
     text = capsys.readouterr().out
-    assert "ПОДТВЕРЖДЁН" in text and "中文" in text and "EN" in text
+    assert "ПОДТВЕРЖДЁН" in text and "CH" in text and "EN" in text
