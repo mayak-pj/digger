@@ -23,8 +23,10 @@ def _import_helpers():
     return ppocr_check
 
 
-def read_photos(ctx_prog, items, helper, say=None):
-    """[{file, expected, provider, text, ok, inside, spare, attempts, seconds}] — через enhancer и менеджер."""
+def read_photos(ctx_prog, items, helper, say=None, mode=""):
+    """[{file, expected, provider, text, ok, inside, spare, attempts, seconds}] — через enhancer и менеджер.
+    mode — способ распознавания (id провайдера, `auto`); пусто — из настроек программы."""
+    kw = {"mode": mode} if mode else {}
     ocr = ctx_prog.modules["ocr"]
     enhancer = ctx_prog.modules["enhancer"]
     rows = []
@@ -36,7 +38,7 @@ def read_photos(ctx_prog, items, helper, say=None):
             img = helper.imread(path)
             if img is None:
                 raise ValueError("файл не открылся как картинка")
-            res = ocr.recognize(enhancer.enhance(img), original=img)
+            res = ocr.recognize(enhancer.enhance(img), original=img, **kw)
             row["provider"] = res.provider
             row["text"] = res.best_text.replace("\n", " / ")
             best = res.best_text.splitlines()
