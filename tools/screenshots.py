@@ -259,6 +259,17 @@ def shoot(app, theme: str, out_dir: str, prefix: str, ocr: bool) -> None:
                 app.processEvents()
                 time.sleep(0.02)
             save(w, name("stats"))
+        fixes = w.ext.get("marking_fixes").instance if w.ext and w.ext.get("marking_fixes") else None
+        if fixes is not None:                                   # вкладка «Замены маркировки» (8.3g)
+            fixes.add("ATMFL", "ATMEL", "из исправления")
+            fixes.add("WINB0ND", "WINBOND")
+            fixes.fix("ATMFL AT24C02")
+            fixes.view.reload()
+            w.tabs.setCurrentWidget(fixes.view)
+            for _ in range(20):
+                app.processEvents()
+                time.sleep(0.02)
+            save(w, name("marking_fixes"))
         for part, dlg in (("settings", SettingsDialog(w.ctx, w)), ("extensions", ExtensionsDialog(w.ext, w)),
                           ("diagnostics", diag), ("adapters", ada)):
             dlg.show()

@@ -13,6 +13,8 @@ from .models import ChipReport, DatasheetHit, ImageVariant
 from .registry import load_modules
 from .utils import imread
 
+FIXED_NOTE = "Маркировка исправлена по запомненным заменам: %s"
+
 
 def create_context(app_dir: str) -> Context:
     cfg = load_config(app_dir)
@@ -27,6 +29,9 @@ class ChipPipeline:
         self.ctx = ctx
         self.m = ctx.modules
         self.opts = ctx.config.get("pipeline", {})
+        # крючки расширений (API 1.1, `Services.add_marking_filter` / `on_marking_corrected`)
+        self.marking_filters: List[Any] = []     # (распознанная маркировка) → исправленная
+        self.marking_listeners: List[Any] = []   # (было, стало) после ручного исправления → строка в журнал или None
 
     def _say(self, report: ChipReport, progress: Optional[ProgressFn], msg: str) -> None:
         report.log.append(msg)
@@ -57,8 +62,32 @@ class ChipPipeline:
             alts = [l.text for l in r.ocr.lines if l.confidence >= 40]
             how = " (%s)" % r.ocr.provider_title if r.ocr.provider_title else ""
             self._say(r, progress, "Распознано%s: %s" % (how, text.replace("\n", " / ")))
+            fixed = self.fix_marking(text)
+            if fixed != text:
+                text = r.ocr.best_text = fixed
+                self._say(r, progress, FIXED_NOTE % text.replace("\n", " / "))
         self.identify(r, text, alts, progress)
         return r, variants
+
+    def fix_marking(self, text: str) -> str:
+        """Распознанная маркировка после фильтров расширений (словарь замен, шаг 8.3g)."""
+        for fn in list(self.marking_filters):
+            fixed = fn(text)
+            if isinstance(fixed, str) and fixed.strip():
+                text = fixed
+        return text
+
+    def refresh_marking(self, r: ChipReport, progress: Optional[ProgressFn] = None) -> bool:
+        """Заново применяет фильтры к уже распознанному фото. True — маркировка изменилась, партномер определён заново."""
+        if r.ocr is None or not r.ocr.best_text:
+            return False
+        fixed = self.fix_marking(r.ocr.best_text)
+        if fixed == r.ocr.best_text:
+            return False
+        r.ocr.best_text = fixed
+        self._say(r, progress, FIXED_NOTE % fixed.replace("\n", " / "))
+        self.identify(r, fixed, [l.text for l in r.ocr.lines if l.confidence >= 40], progress)
+        return True
 
     def identify(self, r: ChipReport, text: str, alts: Optional[List[str]] = None,
                  progress: Optional[ProgressFn] = None) -> None:
@@ -68,7 +97,11 @@ class ChipPipeline:
             if r.ocr is None:
                 r.ocr = OcrResult(best_text=text, best_variant="введено вручную")
             else:
-                r.ocr.best_text = text
+                before, r.ocr.best_text = r.ocr.best_text, text
+                for fn in list(self.marking_listeners):      # ручное исправление: расширения могут его запомнить
+                    note = fn(before, text)
+                    if isinstance(note, str) and note:
+                        self._say(r, progress, note)
         if not r.candidates:
             self._say(r, progress, "Партномер не определён — исправьте маркировку вручную")
             return

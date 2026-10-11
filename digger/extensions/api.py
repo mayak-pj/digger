@@ -20,7 +20,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Sequence
 
-API_VERSION = (1, 0)
+API_VERSION = (1, 1)     # 1.1: крючки маркировки — `add_marking_filter`, `on_marking_corrected`
 API_VERSION_STR = "%d.%d" % API_VERSION
 ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 KINDS = ("tab", "side_panel", "menu_item", "toolbar_button", "settings_page", "csv_column", "report_section")
@@ -127,6 +127,16 @@ class Services:
 
     def db(self) -> ExtensionDb:
         return self._manager.db(self._info)
+
+    def add_marking_filter(self, fn: Callable[[str], Any]) -> Callable[[], None]:
+        """`fn(распознанная маркировка) → исправленная`: конвейер применяет после распознавания, до определения
+        партномера; вручную введённый текст не трогает. Вызов — в фоновом потоке. (API 1.1)"""
+        return self._manager.hook(self._info, "marking_filters", fn)
+
+    def on_marking_corrected(self, fn: Callable[[str, str], Any]) -> Callable[[], None]:
+        """`fn(было, стало)` — пользователь исправил распознанную маркировку. Возвращённая строка попадёт в журнал
+        фото. Вызов — в фоновом потоке. (API 1.1)"""
+        return self._manager.hook(self._info, "marking_listeners", fn)
 
 
 @dataclass

@@ -631,10 +631,19 @@ class MainWindow(QMainWindow):
             return
         r = d["report"]
 
+        others = [(p, x["report"]) for p, x in self.items.items() if x["report"] is not None and x["report"] is not r]
+
         def work2(progress, cancel):
             self.pipe.identify(r, text, [], progress)
-            return r
-        self.start_job(work2, lambda _r: self._refresh_current())
+            # исправление могло пополнить словарь замен (расширение) — он действует и на уже распознанные фото
+            return [p for p, x in others if self.pipe.refresh_marking(
+                x, lambda s, name=os.path.basename(p): progress("%s: %s" % (name, s)))]
+
+        def done(changed):
+            for p in changed:
+                self._mark_item(p)
+            self._refresh_current()
+        self.start_job(work2, done)
 
     def choose_part(self):
         d = self.current()

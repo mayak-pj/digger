@@ -175,6 +175,20 @@ class ExtensionManager:
         self._unsubscribe.setdefault(info.id, []).append(unsubscribe)
         return unsubscribe
 
+    def hook(self, info: ExtensionInfo, name: str, callback: Callable[..., Any]) -> Callable[[], None]:
+        """Крючок конвейера (`marking_filters`, `marking_listeners`); снимается вместе с расширением."""
+        hooks = getattr(self.pipeline, name, None)
+        if hooks is None:
+            return lambda: None
+        fn = self.guarded(info.id, callback)
+        hooks.append(fn)
+
+        def remove() -> None:
+            if fn in hooks:
+                hooks.remove(fn)
+        self._unsubscribe.setdefault(info.id, []).append(remove)
+        return remove
+
     def run_in_background(self, info: ExtensionInfo, fn: Callable[[], Any],
                           on_done: Optional[Callable[[Any], None]] = None) -> None:
         def work() -> Any:
