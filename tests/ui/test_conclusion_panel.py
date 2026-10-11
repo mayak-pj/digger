@@ -107,3 +107,28 @@ def test_report_follows_dark_theme():
     for white in ("#f3f3f3", "#ddd", "#fde8e8", "#e8f5e9", "#eee", "color:#222"):
         assert white not in dark
     assert tokens.DARK["surface_alt"] in dark and tokens.DARK["text"] in dark
+
+
+def test_sites_table_does_not_cover_memory_conclusion(window, tmp_path):
+    """Шаг 8.3d: в тесном окне таблица сайтов сжимается, заключение о памяти остаётся видно; в большом — видна вся."""
+    from digger.gui.conclusion_panel import MAX_ROWS
+    from digger.gui.main_window import REPORT_MIN_HEIGHT
+    w, app, (p,) = _open(window, tmp_path)
+    c = _conclusion()
+    c.protected += [SiteNote("s%d.example" % i, "captcha", "https://s%d.example/q" % i, "search") for i in range(8)]
+    w.items[p] = {"report": _report(p, "NE555P", "?"), "variants": []}
+    w.items[p]["report"].conclusion = c
+    w.show()
+    w.resize(w.minimumSizeHint())
+    w.show_current()
+    for _ in range(5):
+        app.processEvents()
+    panel, table = w.conclusion_panel, w.conclusion_panel.table
+    line = table.verticalHeader().defaultSectionSize()
+    assert panel.isVisible() and w.report_view.height() >= REPORT_MIN_HEIGHT
+    assert table.height() < table.maximumHeight()              # сжалась: остальные строки — прокруткой
+    w.resize(1400, 1500)
+    for _ in range(5):
+        app.processEvents()
+    assert table.height() == table.maximumHeight() and table.height() >= MAX_ROWS * line
+    assert w.report_view.height() >= 2 * REPORT_MIN_HEIGHT     # прибавка высоты — заключению

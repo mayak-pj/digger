@@ -22,7 +22,9 @@ PACKAGES = ["", "SOP-8", "SOIC-8", "DIP-8", "TSSOP-8", "MSOP-8", "SOT-23-5", "SO
             "QFN-20", "QFN-24", "QFN-32", "QFN-48", "LQFP-32", "LQFP-48", "LQFP-64", "LQFP-100", "LQFP-144",
             "TQFP-32", "TQFP-44", "PLCC-32", "PLCC-44", "TSOP-48", "BGA"]
 PHOTO_PAD = SPACE["xs"]            # поле между рамкой и фото
-FIELDS_WIDTH = (340, 440)          # колонка полей: прибавка ширины окна достаётся фото
+FIELDS_WIDTH = (340, 620)          # колонка полей: растёт с окном до этого предела
+PHOTO_ASPECT = 1.5                 # область фото не шире полутора своих высот: без пустых полей по бокам снимка
+PHOTO_MIN_WIDTH = 280
 MARKING_HEIGHT = 64                # три строки маркировки
 TITLE_MAX = 48                     # длиннее — имя файла в заголовке сокращается посередине
 NO_PHOTO = u"Фото не выбрано"
@@ -82,6 +84,14 @@ class PhotoView(QWidget):
             return
         w, h = pm.width() / pm.devicePixelRatio(), pm.height() / pm.devicePixelRatio()
         p.drawPixmap(QPointF((self.width() - w) / 2.0, (self.height() - h) / 2.0), pm)
+
+
+class PhotoBox(QWidget):
+    """Колонка «фото + список вариантов»: ширина ограничена высотой, лишняя ширина окна в неё не уходит."""
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.setMaximumWidth(max(PHOTO_MIN_WIDTH, int(self.height() * PHOTO_ASPECT)))
 
 
 class StateTag(QWidget):
@@ -148,14 +158,16 @@ class ChipCard(QFrame):
 
         body = QHBoxLayout()
         body.setSpacing(t["space_md"])
-        photo = QVBoxLayout()
+        self.photo_box = PhotoBox()
+        photo = QVBoxLayout(self.photo_box)
+        photo.setContentsMargins(0, 0, 0, 0)
         photo.setSpacing(t["space_sm"])
         self.img_label = PhotoView()
         self.variant_box = QComboBox()
         self.variant_box.setToolTip(u"Исходное фото или вариант обработки, по которому читалась маркировка")
         photo.addWidget(self.img_label, 1)
         photo.addWidget(self.variant_box)
-        body.addLayout(photo, 1)
+        body.addWidget(self.photo_box, 3)
 
         self.fields = QWidget()
         self.fields.setMinimumWidth(FIELDS_WIDTH[0])
@@ -215,7 +227,8 @@ class ChipCard(QFrame):
         form.addRow(u"Искать:", search)
         col.addLayout(form)
         col.addStretch(1)
-        body.addWidget(self.fields)
+        body.addWidget(self.fields, 2)
+        body.addStretch(0)               # фото и поля дошли до своих пределов — остаток справа пустой, без рамки
         root.addLayout(body, 1)
         self.set_header("", "", "new")
         for box in (self.variant_box, self.part_box, self.pkg_box):

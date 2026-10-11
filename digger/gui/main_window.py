@@ -36,6 +36,8 @@ PREVIEW = (1280, 960)    # фото для карточки читается н�
 PREVIEW_CACHE = 16
 
 
+CARD_HEIGHT = 330             # высота карточки чипа при запуске; границу можно двигать
+REPORT_MIN_HEIGHT = 170       # столько заключения о памяти видно всегда, даже под таблицей сайтов
 WEB_TIP = ("Сначала локальная база, потом интернет: каталоги, сайты производителей, поисковики —\n"
            "до первого подтверждённого datasheet")
 WEB_ALL_TIP = ("Интернет: пройти все источники, не останавливаясь на первом найденном документе\n"
@@ -187,8 +189,14 @@ class MainWindow(QMainWindow):
         cl = QVBoxLayout(concl)
         cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(0)
-        cl.addWidget(self.conclusion_panel)
-        cl.addWidget(self.report_view, 1)
+        self.concl_split = QSplitter(Qt.Vertical)    # сайты «не найдено» не закрывают заключение о памяти
+        self.concl_split.setChildrenCollapsible(False)
+        self.concl_split.addWidget(self.conclusion_panel)
+        self.concl_split.addWidget(self.report_view)
+        self.concl_split.setStretchFactor(0, 0)
+        self.concl_split.setStretchFactor(1, 1)
+        self.report_view.setMinimumHeight(REPORT_MIN_HEIGHT)
+        cl.addWidget(self.concl_split)
         self.tabs.addTab(concl, "Заключение")
 
         docs = QWidget()
@@ -281,9 +289,9 @@ class MainWindow(QMainWindow):
         self.right.setChildrenCollapsible(False)
         self.right.addWidget(self.card)
         self.right.addWidget(lower)
-        self.right.setStretchFactor(0, 2)
-        self.right.setStretchFactor(1, 3)
-        self.right.setSizes([330, 430])
+        self.right.setStretchFactor(0, 0)        # прибавка высоты окна — заключению, а не полям вокруг фото
+        self.right.setStretchFactor(1, 1)
+        self.right.setSizes([CARD_HEIGHT, 430])
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 8, 8, 8)
@@ -689,6 +697,7 @@ class MainWindow(QMainWindow):
         self.hits_model.set_hits([])
         self.docs_model.set_records(r.records if r else [])
         self.conclusion_panel.set_conclusion(r.conclusion if r else None)
+        self._fit_conclusion()
         self._show_why()
         if not r:
             self.marking.setPlainText("")
@@ -714,6 +723,18 @@ class MainWindow(QMainWindow):
             box.lineEdit().setCursorPosition(0)
         self.report_view.setHtml(self.pipe.render(r, d["variants"], self._report_colors()))
         self._fill_hits(r)
+
+    def _fit_conclusion(self):
+        """Таблице сайтов — её полная высота, если при этом заключению о памяти остаётся `REPORT_MIN_HEIGHT`."""
+        if self.conclusion_panel.isHidden():
+            return
+        total = self.concl_split.height()
+        want = min(self.conclusion_panel.preferred_height(), max(0, total - REPORT_MIN_HEIGHT))
+        self.concl_split.setSizes([want, max(1, total - want)])
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        QTimer.singleShot(0, self._fit_conclusion)       # после раскладки: высота вкладки уже новая
 
     def _update_header(self, *_):
         """Заголовок карточки — по состоянию выбранного фото в списке и его отчёту."""

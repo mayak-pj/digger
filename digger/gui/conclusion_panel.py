@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (QAbstractItemView, QHBoxLayout, QHeaderView, QLabel
                              QVBoxLayout, QWidget)
 
 COLUMNS = ("Раздел", "Сайт", "Причина", "Ссылка")
+MAX_ROWS, MIN_ROWS = 6, 2             # строк таблицы видно без прокрутки: когда места хватает и когда окно тесное
 
 
 class ConclusionPanel(QWidget):
@@ -32,7 +33,6 @@ class ConclusionPanel(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().hide()
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.hint = QLabel()
         self.hint.setWordWrap(True)
         self.b_open = QPushButton(theme.icon("external-link"), "Открыть в браузере")
@@ -52,6 +52,10 @@ class ConclusionPanel(QWidget):
         self.b_allow.clicked.connect(lambda: self._emit(self.allow))
         self.table.selectionModel().currentRowChanged.connect(lambda *_: self._buttons())
         self.set_conclusion(None)
+
+    def preferred_height(self) -> int:
+        """Высота панели, при которой таблица видна целиком (до `MAX_ROWS` строк)."""
+        return self.minimumSizeHint().height() - self.table.minimumHeight() + self.table.maximumHeight()
 
     def note(self):
         item = self.model.item(self.table.currentIndex().row(), 0) if self.table.currentIndex().isValid() else None
@@ -88,9 +92,11 @@ class ConclusionPanel(QWidget):
             self.model.appendRow(cells)
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        rows = min(self.model.rowCount(), 6)          # таблица по высоте строк, без прокрутки
-        self.table.setFixedHeight(self.table.horizontalHeader().height() + rows * self.table.verticalHeader().defaultSectionSize() + 4)
-        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff if self.model.rowCount() <= 6 else Qt.ScrollBarAsNeeded)
+        head, line = self.table.horizontalHeader().height(), self.table.verticalHeader().defaultSectionSize()
+        rows = min(self.model.rowCount(), MAX_ROWS)   # таблица по высоте строк; в тесном окне сжимается до MIN_ROWS
+        self.table.setMaximumHeight(head + rows * line + 4)
+        self.table.setMinimumHeight(head + min(rows, MIN_ROWS) * line + 4)
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.table.setVisible(self.model.rowCount() > 0)
         if self.model.rowCount():
             self.table.selectRow(0)

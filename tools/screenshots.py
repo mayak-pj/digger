@@ -5,7 +5,7 @@
 
 Программа запускается во временной папке (настройки по умолчанию, пустая база): рабочие данные не трогаются.
 На каждую тему: главное окно с образцами фото (первое распознано), вкладка «Документы», живая лента поиска
-(пример поиска из ARCHITECTURE §4.8, поиск ещё идёт), «Настройки», «Расширения».
+(пример поиска из ARCHITECTURE §4.8, поиск ещё идёт), то же окно тесным и большим, «Настройки», «Расширения».
 """
 from __future__ import annotations
 
@@ -175,6 +175,8 @@ def shoot(app, theme: str, out_dir: str, prefix: str, ocr: bool) -> None:
         from digger.acquire.conclusion import Conclusion, SiteNote
         c = Conclusion(part="NE555P", sources=14, languages=3, seconds=52)
         c.protected = [SiteNote("alldatasheet.com", "captcha", "https://www.alldatasheet.com/view.jsp?Searchword=NE555P", "search")]
+        c.protected += [SiteNote(site, "captcha", "https://%s/search?q=NE555P+datasheet" % site, "search")
+                        for site in ("duckduckgo.com", "mojeek.com", "search.brave.com", "baidu.com", "sogou.com")]
         c.blocked = [SiteNote("ti.com", "dns")]
         c.not_whitelisted = [SiteNote("files.example.org", "", "https://files.example.org/ne555.pdf", "page")]
         next(d["report"] for d in w.items.values() if d["report"]).conclusion = c
@@ -192,6 +194,13 @@ def shoot(app, theme: str, out_dir: str, prefix: str, ocr: bool) -> None:
             time.sleep(0.01)
         save(w, name("feed"))
         w.search_feed.set_running(False)
+        for part, size in (("small", (1000, 640)), ("large", (1920, 1040))):     # раскладка в тесном и в большом окне
+            w.resize(*size)
+            for _ in range(5):
+                app.processEvents()
+            save(w, name(part))
+        w.resize(1280, 820)
+        app.processEvents()
         from digger.gui.dialogs import AdaptersDialog, DiagnosticsDialog
         diag = DiagnosticsDialog([{"ok": True, "category": u"Каталог", "name": "alldatasheet", "detail": "200",
                                    "url": "https://x.example"},

@@ -117,7 +117,8 @@ def test_long_file_name_is_shortened(qapp, tmp_path):
 
 def test_window_layout(window):
     from PyQt5.QtCore import Qt
-    from digger.gui.chip_card import FIELDS_WIDTH
+    from digger.gui.chip_card import FIELDS_WIDTH, PHOTO_ASPECT
+    from digger.gui.main_window import CARD_HEIGHT
     w, app = window
     assert [w.tabs.tabText(i) for i in range(4)] == [u"Заключение", u"Документы", u"Почему", u"Журнал"]
     assert w.right.orientation() == Qt.Vertical and w.right.widget(0) is w.card
@@ -131,9 +132,11 @@ def test_window_layout(window):
     w.show()
     w.resize(1100, 700)
     app.processEvents()
-    small = w.img_label.size()
+    small, card, tabs = w.img_label.size(), w.card.height(), w.tabs.height()
     w.resize(1700, 1100)
     app.processEvents()
     big = w.img_label.size()
-    assert big.width() >= small.width() + 400 and big.height() > small.height()     # прибавка окна — фото
-    assert w.card.fields.width() <= FIELDS_WIDTH[1]
+    # шаг 8.3d: область фото не растягивается на пустые поля — прибавка высоты окна уходит вкладкам с заключением
+    assert big.width() <= int(w.card.photo_box.height() * PHOTO_ASPECT) + 1 and big.height() >= small.height()
+    assert w.card.height() <= max(card, CARD_HEIGHT) and w.tabs.height() >= tabs + 300
+    assert FIELDS_WIDTH[0] <= w.card.fields.width() <= FIELDS_WIDTH[1]
