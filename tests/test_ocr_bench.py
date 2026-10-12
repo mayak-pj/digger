@@ -79,8 +79,10 @@ def test_bench_runs_every_local_provider_and_never_cloud(tmp_path):
 def test_report_has_table_and_misses(tmp_path):
     results = ob.bench(_Prog(), ob.pc.collect(_photos(tmp_path, ("LM358.png", "NE555.png"))))
     md = ob.report_md(results, "папка (2 фото)")
-    assert "| Провайдер | Фото | Партномер, % | Ответ внутри строки, % | Символы, % | Время на фото, с | Стоимость | Ошибки |" in md
-    assert "| good — Хороший | 2 | 50.0 | 50.0 | 60.0 |" in md
+    assert ("| Провайдер | Фото | Партномер, % | Ответ внутри строки, % | Выбран, % | Выбран или полный код, % | Символы, % "
+            "| Время на фото, с | Стоимость | Ошибки |") in md
+    assert "| good — Хороший | 2 | 50.0 | 50.0 | 0.0 | 0.0 | 60.0 |" in md
+    assert "программа выбрала другое" not in md                                  # в программе-примере нет модуля определения
     assert "| cloud — Облако | — |" in md and "не вызывался" in md
     assert "## Не прочитано способом `auto` (1)" in md and "| NE555.png | NE555 | LM358 |" in md
     assert "«Авто» — нет" not in md                                              # «Авто» читает всё, что читает good

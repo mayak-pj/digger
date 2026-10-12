@@ -1,5 +1,5 @@
 {
-  "_readme": "Справочник семейств микросхем. Правила проверяются сверху вниз, срабатывает первое подходящее. pattern — регулярное выражение для нормализованного партномера (только A-Z и 0-9). size: kbit / mbit / 27c — как понимать число из группы (?P<size>...). memory: [] — памяти нет, null — не указывать. Файл можно дополнять самостоятельно.",
+  "_readme": "Справочник семейств микросхем. Правила проверяются сверху вниз, срабатывает первое подходящее. pattern — регулярное выражение для нормализованного партномера (только A-Z и 0-9). size: kbit / mbit / 27c — как понимать число из группы (?P<size>...). memory: [] — памяти нет, null — не указывать. shapes — запись семейства: если прочитанное начинается с prefix, но не подходит под shape, а вариант с заменой похожих символов (S↔5, O↔0…) подходит — выбирается вариант. Файл можно дополнять самостоятельно.",
   "rules": [
     {"pattern": "^(AT)?24(C|LC|AA|FC|CS|M|MAC)(?P<size>\\d{2,4})", "family": "I2C EEPROM", "manufacturer": "разные (Microchip/Atmel, ST, onsemi, Giantec, FMD...)", "memory": [{"kind": "EEPROM", "size": "kbit"}]},
     {"pattern": "^(M|BR|CAT|FT|HT|GT|BL|KT)24C(?P<size>\\d{2,4})", "family": "I2C EEPROM", "manufacturer": "ST / ROHM / onsemi / Fremont / Holtek / Giantec / Belling", "memory": [{"kind": "EEPROM", "size": "kbit"}]},
@@ -39,5 +39,8 @@
     {"pattern": "^(LM3[0-9]{2}|LM78|LM79|LM317|LM337|LM393|LM339|LM358|LM324|LM386|LM555|NE555|NE556|NE5532|TL07|TL08|TL431|TL494|UA78|UA741|L78|L79|AMS1117|AMS1085|AP2112|XC62|HT7[1-5]|ME6|LP2985|MC34063|ULN200|ULN280|L293|L298|DRV8|A4988|TP4056|MT3608|LM2596|MP1584|SS34|BC8|2N3|IRF|AO3|SI23|MOC30|PC817|TLP)", "family": "Аналоговая / силовая / дискретная", "manufacturer": "разные", "memory": []},
     {"pattern": "^(74HC|74HCT|74LS|74AC|74ACT|74LVC|74AHC|74F|74S|SN74|CD40|CD45|HEF40|MC14|4000|40[0-9]{2}B)", "family": "Стандартная логика 74/4000", "manufacturer": "разные", "memory": []},
     {"pattern": "^(MAX232|MAX3232|MAX485|SP3485|SN75176|ADM|TJA10|MCP2551|SN65HVD)", "family": "Интерфейсные приёмопередатчики", "manufacturer": "разные", "memory": []}
+  ],
+  "shapes": [
+    {"prefix": "^(STM32|GD32)", "shape": "^(STM32|GD32)[A-Z]{1,2}[0-9][0-9A-Z][0-9]"}
   ]
 }

@@ -59,6 +59,8 @@ def _summary(pid, title, rows):
     return {"id": pid, "title": title, "skipped": "", "rows": rows, "total": n,
             "ok": sum(1 for r in rows if r["ok"]),
             "inside": sum(1 for r in rows if r["ok"] or r["inside"]),
+            "chosen": sum(1 for r in rows if r.get("chosen_ok")),
+            "chosen_full": sum(1 for r in rows if r.get("chosen_ok") or r.get("chosen_full")),
             "chars": sum(r["chars"] for r in rows) / n if n else 0.0,
             "seconds": sum(r["seconds"] for r in rows),
             "errors": sum(1 for r in rows if r["error"])}
@@ -96,16 +98,20 @@ def report_md(results, source, cost="бесплатно"):
              "Дата: %s" % datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
              "Источник: %s. Правильный ответ — имя файла (или `ответы.csv`).  " % source,
              "`Партномер` — строка итоговой маркировки совпала с ответом; `Ответ внутри строки` — совпала или содержит "
-             "ответ («25Q128FVPG» при ответе «25Q128FV»); `Символы` — доля верных символов ответа в лучшей строке.", "",
-             "| Провайдер | Фото | Партномер, % | Ответ внутри строки, % | Символы, % | Время на фото, с | Стоимость | Ошибки |",
-             "|---|---|---|---|---|---|---|---|"]
+             "ответ («25Q128FVPG» при ответе «25Q128FV»); `Символы` — доля верных символов ответа в лучшей строке; "
+             "`Выбран` — программа выделила ответ из прочитанного (первый кандидат); `Выбран или полный код` — "
+             "ответ или заказной код, начинающийся с ответа.", "",
+             "| Провайдер | Фото | Партномер, % | Ответ внутри строки, % | Выбран, % | Выбран или полный код, % | Символы, % "
+             "| Время на фото, с | Стоимость | Ошибки |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
     for r in results:
         if r["skipped"]:
-            lines.append("| %s | — | — | — | — | — | — | — |" % r["title"])
+            lines.append("| %s | — | — | — | — | — | — | — | — | — |" % r["title"])
             continue
         t = r["total"]
-        lines.append("| %s | %d | %s | %s | %.1f | %.2f | %s | %d |" % (
-            r["title"], t, pc._pct(r["ok"], t), pc._pct(r["inside"], t), 100.0 * r["chars"],
+        lines.append("| %s | %d | %s | %s | %s | %s | %.1f | %.2f | %s | %d |" % (
+            r["title"], t, pc._pct(r["ok"], t), pc._pct(r["inside"], t), pc._pct(r["chosen"], t),
+            pc._pct(r["chosen_full"], t), 100.0 * r["chars"],
             r["seconds"] / t if t else 0.0, cost, r["errors"]))
     skipped = [r for r in results if r["skipped"]]
     if skipped:
@@ -133,6 +139,13 @@ def report_md(results, source, cost="бесплатно"):
             for row in bad:
                 lines.append("| %s | %s | %s | %s | %.0f |" % (row["file"], row["expected"], _cell(row),
                                                                row["provider"] or "—", 100.0 * row["chars"]))
+        lost = [row for row in auto["rows"] if (row["ok"] or row["inside"]) and not row.get("chosen_ok")]
+        if lost and any(row.get("chosen") for row in auto["rows"]):     # программа без модуля определения — не считаем
+            lines += ["", "## Ответ прочитан, но программа выбрала другое (%d)" % len(lost), "",
+                      "| Файл | Ожидалось | Выбрано | Прочитано |", "|---|---|---|---|"]
+            for row in lost:
+                lines.append("| %s | %s | %s | %s |" % (row["file"], row["expected"], row.get("chosen") or "—",
+                                                        _cell(row)))
     return "\n".join(lines) + "\n"
 
 

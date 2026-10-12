@@ -9,6 +9,12 @@
       {"prefix": "BY", "maker": "Boya", "aliases": ["boya", "博雅"]},
       {"prefix": "EN", "maker": "Eon", "aliases": ["eon", "宜扬"]}
     ]},
+    {"pattern": "^25X\\d", "variants": [
+      {"prefix": "W", "maker": "Winbond", "aliases": ["winbond", "华邦"]}
+    ]},
+    {"pattern": "^25(LQ|WQ|VQ)\\d", "variants": [
+      {"prefix": "GD", "maker": "GigaDevice", "aliases": ["gigadevice", "giga device", "兆易创新", "兆易"]}
+    ]},
     {"pattern": "^25(LC|AA)?\\d", "variants": [
       {"prefix": "AT", "maker": "Microchip", "aliases": ["microchip", "atmel"]}
     ]},

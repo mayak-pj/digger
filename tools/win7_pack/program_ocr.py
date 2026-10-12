@@ -5,6 +5,8 @@
 «Верно» — строка итоговой маркировки совпала с ответом; отдельно считаются фото, где ответ лежит внутри строки
 («25Q128FVPG» при ответе «25Q128FV») и где он есть только среди запасных строк другого способа. Ход цепочки
 (способ, исход, уверенность, прочитанное) — в program_ocr.json и в таблице фото, где способов было несколько.
+«Выбрано» — партномер, который программа выделила из прочитанного (первый кандидат): он уходит в поиск datasheet.
+«Полный код» — выбран заказной код, начинающийся с ответа («25Q128FVPG»): суффикс корпуса поиск отбросит сам.
 Отчёт — program_ocr.md и program_ocr.json в папке проверки.
 """
 import json
@@ -14,6 +16,7 @@ import time
 import traceback
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+FULL_MIN_LEN = 5        # «полный код, начинающийся с ответа» считаем только для ответов такой длины
 
 
 def _import_helpers():
@@ -24,15 +27,18 @@ def _import_helpers():
 
 
 def read_photos(ctx_prog, items, helper, say=None, mode=""):
-    """[{file, expected, provider, text, ok, inside, spare, attempts, seconds}] — через enhancer и менеджер.
+    """[{file, expected, provider, text, ok, inside, spare, chosen, chosen_ok, chosen_full, attempts, seconds}] —
+    через enhancer, менеджер и модуль определения партномера (если он есть в программе).
     mode — способ распознавания (id провайдера, `auto`); пусто — из настроек программы."""
     kw = {"mode": mode} if mode else {}
     ocr = ctx_prog.modules["ocr"]
     enhancer = ctx_prog.modules["enhancer"]
+    identifier = ctx_prog.modules.get("identifier")
     rows = []
     for path, expected in items:
         row = {"file": os.path.basename(path), "expected": expected, "provider": "", "text": "", "ok": False,
-               "inside": False, "spare": False, "attempts": [], "seconds": 0.0, "error": ""}
+               "inside": False, "spare": False, "chosen": "", "chosen_ok": False, "chosen_full": False,
+               "attempts": [], "seconds": 0.0, "error": ""}
         t0 = time.time()
         try:
             img = helper.imread(path)
@@ -45,6 +51,12 @@ def read_photos(ctx_prog, items, helper, say=None, mode=""):
             row["ok"] = any(helper.is_match(t, expected) for t in best)
             row["inside"] = not row["ok"] and any(expected and expected in helper.norm(t) for t in best)
             row["spare"] = not row["ok"] and any(helper.is_match(l.text, expected) for l in res.lines)
+            if identifier is not None:      # как в конвейере: запасные строки — с уверенностью от 40
+                cands = identifier.identify(res.best_text, [l.text for l in res.lines if l.confidence >= 40])
+                row["chosen"] = cands[0].part if cands else ""
+                row["chosen_ok"] = bool(expected) and row["chosen"] == expected
+                row["chosen_full"] = (not row["chosen_ok"] and len(expected) >= FULL_MIN_LEN
+                                      and row["chosen"].startswith(expected))
             row["attempts"] = [[a.provider, a.status, a.confidence, a.text.replace("\n", " / ")]
                                for a in getattr(res, "attempts", [])]
         except Exception as e:  # noqa — одно фото не должно ронять проверку
@@ -66,15 +78,17 @@ def report_md(rows, problems):
              "Совпало с ответом: %d из %d" % (ok, n),
              "Ответ внутри прочитанной строки: %d" % sum(1 for r in rows if r.get("inside")),
              "Ответ только среди запасных строк: %d" % sum(1 for r in rows if r.get("spare")),
+             "Программа выбрала ответ: %d" % sum(1 for r in rows if r.get("chosen_ok")),
+             "Программа выбрала полный код, начинающийся с ответа: %d" % sum(1 for r in rows if r.get("chosen_full")),
              "Провайдеры: " + ", ".join("%s — %d" % kv for kv in sorted(by.items())),
              "Среднее время на фото: %.2f с" % (sum(r["seconds"] for r in rows) / n if n else 0.0)]
     if problems:
         lines += ["", "Проблемы провайдеров: " + problems]
-    lines += ["", "| Файл | Ожидалось | Провайдер | Прочитано | Верно | Время, с |", "|---|---|---|---|---|---|"]
+    lines += ["", "| Файл | Ожидалось | Провайдер | Прочитано | Верно | Выбрано | Время, с |", "|---|---|---|---|---|---|---|"]
     for r in rows:
-        lines.append("| %s | %s | %s | %s | %s | %.2f |" % (
+        lines.append("| %s | %s | %s | %s | %s | %s | %.2f |" % (
             r["file"], r["expected"], r["provider"] or "—", (r["text"] or r["error"]).replace("|", "/")[:60],
-            "да" if r["ok"] else "нет", r["seconds"]))
+            "да" if r["ok"] else "нет", r.get("chosen") or "—", r["seconds"]))
     several = [r for r in rows if len(r.get("attempts") or []) > 1]
     if several:
         lines += ["", "## Фото, где пробовалось несколько способов (%d)" % len(several), "",
@@ -112,5 +126,6 @@ def run(ctx):
     ok = sum(1 for r in rows if r["ok"])
     errors = sum(1 for r in rows if r["error"])
     return {"status": "ok" if errors == 0 else "fail", "photos": len(rows), "read": ok, "errors": errors,
+            "chosen": sum(1 for r in rows if r["chosen_ok"]),
             "providers": sorted(set(r["provider"] for r in rows)), "problems": problems,
             "note": "совпало %d из %d" % (ok, len(rows))}

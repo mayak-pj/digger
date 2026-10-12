@@ -51,13 +51,28 @@ class PartRules:
     def __init__(self, app_dir: str) -> None:
         path = os.path.join(app_dir, "data", "part_rules.json")
         self.rules: List[Dict[str, Any]] = []
+        self.shapes: List[Any] = []
         if os.path.exists(path):
-            for r in read_json(path).get("rules", []):
+            data = read_json(path)
+            for r in data.get("rules", []):
                 try:
                     r["_re"] = re.compile(r["pattern"])
                     self.rules.append(r)
                 except re.error:
                     pass
+            for r in data.get("shapes", []):
+                try:
+                    self.shapes.append((re.compile(r["prefix"]), re.compile(r["shape"])))
+                except (re.error, KeyError):
+                    pass
+
+    def shape_ok(self, part: str) -> Optional[bool]:
+        """Подходит ли партномер под запись своего семейства (`shapes`); None — запись семейства не задана."""
+        p = norm_part(part)
+        for prefix, shape in self.shapes:
+            if prefix.search(p):
+                return bool(shape.search(p))
+        return None
 
     def match(self, part: str) -> Optional[Dict[str, Any]]:
         p = norm_part(part)

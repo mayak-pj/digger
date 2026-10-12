@@ -106,3 +106,34 @@ def test_run_with_real_program(tmp_path):
     assert res["status"] == "ok", res
     assert res["read"] == 1 and "ppocr" in res["providers"]
     assert (work / "program_ocr.md").is_file()
+
+
+def test_chosen_part_is_counted_separately(tmp_path):
+    """Шаг 8.5: кроме прочитанной строки считается партномер, который программа выделила из прочитанного."""
+    from digger.core.models import Candidate
+
+    class Ocr(_Ocr):
+        def recognize(self, variants, original=None, progress=None):
+            return OcrResult(lines=[OcrLine("winbong", 90.0, "x"), OcrLine("25Q64FVSIG", 90.0, "x"), OcrLine("zz", 20.0, "x")],
+                             best_text="winbong\n25Q64FVSIG", provider="ppocr")
+
+    class Ident(object):
+        seen = []
+
+        def identify(self, text, alternatives=None):
+            Ident.seen.append((text, alternatives))
+            return [Candidate(part="25Q64FVSIG", score=0.9), Candidate(part="WINBONG", score=0.5)]
+
+    class Prog(object):
+        modules = {"ocr": Ocr(), "enhancer": _Enh(), "identifier": Ident()}
+
+    for name in ("25Q64FV.png", "25Q64FVSIG.png", "FVSIG.png"):
+        shutil.copy2(os.path.join(ROOT, "tests", "samples", "stm32.png"), str(tmp_path / name))
+    by = {r["file"]: r for r in po.read_photos(Prog(), pc.collect(str(tmp_path)), pc)}
+    assert Ident.seen[0] == ("winbong\n25Q64FVSIG", ["winbong", "25Q64FVSIG"])     # запасные строки — как в конвейере
+    assert by["25Q64FVSIG.png"]["chosen_ok"] and not by["25Q64FVSIG.png"]["chosen_full"]
+    assert by["25Q64FV.png"]["chosen_full"] and not by["25Q64FV.png"]["chosen_ok"]  # выбран полный заказной код
+    assert not by["FVSIG.png"]["chosen_ok"] and not by["FVSIG.png"]["chosen_full"]
+    md = po.report_md(list(by.values()), "")
+    assert "Программа выбрала ответ: 1" in md and "полный код, начинающийся с ответа: 1" in md
+    assert "| да | 25Q64FVSIG |" in md
