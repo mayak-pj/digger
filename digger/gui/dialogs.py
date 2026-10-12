@@ -7,11 +7,11 @@ import io
 import os
 import sys
 
-from PyQt5.QtCore import QDir, QStandardPaths, Qt, QUrl
+from PyQt5.QtCore import QCollator, QDir, QSortFilterProxyModel, QStandardPaths, Qt, QUrl
 from PyQt5.QtGui import QColor, QDesktopServices
 from PyQt5.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
                              QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox,
-                             QPushButton, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
+                             QPushButton, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QTreeView, QVBoxLayout, QWidget)
 
 from ..core.config import save_user_config
 from ..extensions.loader import STATES as EXTENSION_STATES
@@ -40,6 +40,26 @@ def quick_places(volumes_dir: str = "/Volumes"):
     return out
 
 
+class FoldersFirstProxy(QSortFilterProxyModel):
+    """Порядок в окне выбора: сначала папки, потом файлы; внутри — по имени без учёта регистра, числа — по
+    величине («фото 2» раньше «фото 10»). Qt на macOS сам папки вперёд не ставит — файлы и папки шли вперемешку."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._collator = QCollator()
+        self._collator.setNumericMode(True)
+        self._collator.setCaseSensitivity(Qt.CaseInsensitive)
+
+    def lessThan(self, left, right):
+        model = self.sourceModel()
+        left_dir, right_dir = model.isDir(left), model.isDir(right)
+        if left_dir != right_dir:        # папки сверху при любом направлении сортировки
+            return left_dir if self.sortOrder() == Qt.AscendingOrder else right_dir
+        if left.column() == 0:
+            return self._collator.compare(model.fileName(left), model.fileName(right)) < 0
+        return super().lessThan(left, right)
+
+
 class PhotoPickDialog(QFileDialog):
     """Выбор фото одним окном: один файл, несколько файлов, папка или всё вперемешку.
 
@@ -56,6 +76,10 @@ class PhotoPickDialog(QFileDialog):
                             (QFileDialog.LookIn, "Папка:"), (QFileDialog.FileName, "Выбрано:"),
                             (QFileDialog.FileType, "Показывать:")):
             self.setLabelText(label, text)
+        self.setProxyModel(FoldersFirstProxy(self))
+        tree = self.findChild(QTreeView)
+        if tree is not None:             # Qt помнит прошлую сортировку окна; у нас всегда с начала — по имени
+            tree.sortByColumn(0, Qt.AscendingOrder)
         self.setSidebarUrls([QUrl.fromLocalFile(p) for p in quick_places()])
         self.resize(900, 540)
         split = self.findChild(QSplitter)

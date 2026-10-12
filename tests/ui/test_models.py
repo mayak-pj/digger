@@ -236,6 +236,31 @@ def test_one_dialog_picks_files_and_folders(qapp, photo_dir):
     _pump(qapp, lambda: True)
 
 
+def test_dialog_shows_folders_first_then_files_by_name(qapp, tmp_path):
+    """Замечание пользователя: файлы и папки шли вперемешку. Сначала папки, потом файлы; по имени, числа — по величине."""
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtWidgets import QListView
+    from digger.gui.dialogs import PhotoPickDialog
+    for name in (u"яблоко", "Beta", "alpha"):
+        (tmp_path / name).mkdir()
+    for name in ("chip 10.png", "chip 2.png", "Zeta.png", "aaa.png"):
+        _png(str(tmp_path / name))
+    dlg = PhotoPickDialog(None, str(tmp_path), (".png",))
+    dlg.show()
+    view = dlg.findChild(QListView, "listView")
+
+    def names():
+        m, root = view.model(), view.rootIndex()
+        return [m.index(r, 0, root).data() for r in range(m.rowCount(root))]
+
+    _pump(qapp, lambda: len(names()) == 7, timeout=30)
+    assert names() == ["alpha", "Beta", u"яблоко", "aaa.png", "chip 2.png", "chip 10.png", "Zeta.png"]
+    view.model().sort(0, Qt.DescendingOrder)                    # обратный порядок имён — папки всё равно сверху
+    assert names() == [u"яблоко", "Beta", "alpha", "Zeta.png", "chip 10.png", "chip 2.png", "aaa.png"]
+    dlg.deleteLater()
+    _pump(qapp, lambda: True)
+
+
 def test_dialog_sidebar_lists_drives_first(qapp, tmp_path, monkeypatch):
     """Замечание пользователя: в своём окне выбора пропали флешка и внешний SSD — они снова на боковой панели."""
     from digger.gui import dialogs
