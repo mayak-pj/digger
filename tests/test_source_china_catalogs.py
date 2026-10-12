@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Китайские каталоги шага 2.10: адаптер direct_url (LCSC/szlcsc, Semiee). Вёрстка синтетическая."""
+"""Китайские каталоги шага 2.10: адаптер direct_url (LCSC/szlcsc, Semiee). Вёрстка синтетическая.
+
+Шаг 8.6a: szlcsc отвечает кодом 203 и страницей из одного запутанного скрипта (ставит cookie и перезагружает
+страницу) — это защита сайта, а не «не найдено»; Semiee отдаёт выдачу только после входа — источник выключен."""
 import logging
 import os
 
@@ -9,6 +12,7 @@ from digger.acquire.query import Query
 from digger.acquire.registry import ADAPTERS, Registry
 from digger.acquire.sources.base import SourceEntry
 from digger.acquire.sources.catalogs.china import DirectUrl, links
+from digger.acquire.sources.catalogs.common import is_blocked
 from digger.core.netsafe import SafeHttp
 from tests.fakes.fake_http import FakeHttp
 
@@ -23,7 +27,7 @@ PAGE = ('<a href="%s">W25Q64JVSSIQ 闪存</a><a href="/about.html">关于</a>'
 
 
 def make(tmp_path, sid="lcsc", clock=None, **over):
-    entry = next(s for s in SRC.entries() if s.id == sid).to_dict()
+    entry = next(s for s in SRC.entries(include_disabled=True) if s.id == sid).to_dict()
     bus = EventBus()
     events = []
     bus.subscribe(events.append)
@@ -36,8 +40,15 @@ def make(tmp_path, sid="lcsc", clock=None, **over):
 
 def test_registered_and_in_sources_json():
     assert ADAPTERS["direct_url"] is DirectUrl
-    assert {"lcsc", "semiee"} <= {a.id for a in SRC.build("china")}
+    assert "lcsc" in {a.id for a in SRC.build("china")}
     assert "direct_url" not in SRC.missing
+
+
+def test_semiee_disabled_with_reason():
+    """Выдача Semiee приходит запросом, который без входа отвечает «请登录»: источник выключен, причина записана."""
+    assert "semiee" not in {a.id for a in SRC.build("china")}
+    entry = next(s for s in SRC.entries(include_disabled=True) if s.id == "semiee")
+    assert not entry.enabled and "вход" in entry.options["note"]
 
 
 def test_links_only_source_domains_and_part():
@@ -76,6 +87,32 @@ def test_waf_block_is_captcha_and_rests(tmp_path):
     now[0] += 16 * 60
     fake.add(SEARCH, (PAGE % (DETAIL, PDF)).encode("utf-8"))
     assert PDF in [l.url for l in ad.search(Q, http) if l.kind == "pdf"]
+
+
+# Заглушка szlcsc (записана 2026-10-12, скрипт сокращён): слова cookie и reload лежат в таблице строк,
+# «document.cookie» в тексте нет.
+STUB = ('<!DOCTYPE html><html> <head> <meta charset="UTF-8"> <script> var _xvasu = 1104951776; var _xvtsc = 300; '
+        'var _xvpfs = "tws2_"; </script> <script> function a3_0x5716(){var _0x13562e=[\';expires=\',\'call\','
+        '\'chain\',\'length\',\'charCodeAt\',\'input\',\'counter\',\'reload\',\'string\',\'test\','
+        '\'fromCharCode\',\'cookie\',\'stateObject\',\'constructor\',\'apply\',\'setTime\',\'join\'];'
+        'a3_0x5716=function(){return _0x13562e;};return a3_0x5716();}</script> </head><body></body></html>')
+
+
+def test_script_stub_203_is_protection_not_empty(tmp_path):
+    now = [1000.0]
+    ad, http, fake, events = make(tmp_path, clock=lambda: now[0])
+    fake.add(SEARCH, STUB.encode("utf-8"), status=203)
+    assert ad.search(Q, http) == []
+    assert events[-1].key == "engine.captcha" and events[-1].params["minutes"] == 15
+    calls = len(fake.calls)
+    assert ad.search(Q, http) == [] and len(fake.calls) == calls      # в отдых в сеть не ходим
+
+
+def test_page_with_text_and_203_is_not_protection():
+    assert is_blocked(203, STUB)
+    assert not is_blocked(200, STUB)                                  # тот же скрипт на обычной странице — не признак
+    assert not is_blocked(203, "<html><body><p>cookie policy</p><a href=\"/x\">reload</a>"
+                               + "текст страницы " * 50 + "</body></html>")
 
 
 def test_other_part_empty_query(tmp_path):

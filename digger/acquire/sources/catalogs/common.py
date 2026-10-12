@@ -17,6 +17,7 @@ _A = re.compile(r"<a\b([^>]*)>(.*?)</a\s*>", re.S | re.I)
 _SRC = re.compile(r"<(?:iframe|embed|object)\b[^>]*?\b(?:src|data)=[\"']([^\"']+)[\"']", re.S | re.I)
 _ATTR = r"\b%s=[\"']([^\"']*)[\"']"
 _TAG = re.compile(r"<[^>]+>")
+_SCRIPT = re.compile(r"<(script|style)\b.*?</\1\s*>", re.S | re.I)
 _CHALLENGE_MARKS = ("just a moment", "challenge-error-text", "_cf_chl_opt", "cf-challenge")
 
 
@@ -24,8 +25,9 @@ def is_blocked(status: int, page: str) -> bool:
     """Страница проверки Cloudflare вместо сайта. Одного адреса challenges.cloudflare.com мало: обычная страница
     подключает оттуда виджет для формы входа (FindChips)."""
     low = page[:200000].lower()
-    if status == 203 and len(page) < 20000 and "document.cookie" in low and "reload" in low:
-        return True               # LCSC: «203» со скриптом, ставящим куку и перезагружающим страницу (защита сайта)
+    if status == 203 and len(page) < 20000 and "cookie" in low and "reload" in low and not text_of(_SCRIPT.sub("", page)):
+        return True               # LCSC: «203» и страница из одного скрипта, ставящего куку и перезагружающего её
+                                  # (защита сайта); скрипт запутан — слова лежат в таблице строк, без «document.»
     if "waf拦截页面" in low or (status in (403, 503) and "cloudflare" in low):
         return True
     return "challenge" in low and any(mark in low for mark in _CHALLENGE_MARKS)
