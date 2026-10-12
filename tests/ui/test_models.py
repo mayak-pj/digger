@@ -274,7 +274,7 @@ def test_dialog_sidebar_lists_drives_first(qapp, tmp_path, monkeypatch):
     assert dialogs.quick_places(str(tmp_path / u"нет"))                          # нет папки дисков — остаются папки пользователя
     monkeypatch.setattr(dialogs, "quick_places", lambda: [str(vols / "SSD"), str(tmp_path)])
     dlg = dialogs.PhotoPickDialog(None, str(tmp_path), (".png",))
-    assert [u.toLocalFile() for u in dlg.sidebarUrls()] == [str(vols / "SSD"), str(tmp_path)]
+    assert [os.path.normpath(u.toLocalFile()) for u in dlg.sidebarUrls()] == [str(vols / "SSD"), str(tmp_path)]
     dlg.deleteLater()
     _pump(qapp, lambda: True)
 
