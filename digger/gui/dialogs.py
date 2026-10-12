@@ -19,6 +19,41 @@ from ..ui import theme as ui_theme
 EXTENSION_COLORS = {"active": "#1a7f37", "failed": "#c62828", "incompatible": "#c62828"}
 
 
+class PhotoPickDialog(QFileDialog):
+    """Выбор фото одним окном: один файл, несколько файлов, папка или всё вперемешку.
+
+    Системное окно Windows выбирает либо файлы, либо папку, поэтому окно — своё (Qt). «Добавить» на выделенной
+    папке берёт её целиком, а не заходит внутрь; зайти в папку — двойным щелчком. Диск читает модель Qt в фоне."""
+
+    def __init__(self, parent=None, start_dir: str = "", extensions=()):
+        super().__init__(parent, "Фото микросхем: выделите фото или папку", start_dir,
+                         "Изображения (%s);;Все файлы (*)" % " ".join("*" + e for e in extensions))
+        self.setOption(QFileDialog.DontUseNativeDialog, True)
+        self.setFileMode(QFileDialog.ExistingFiles)
+        for label, text in ((QFileDialog.Accept, "Добавить"), (QFileDialog.Reject, "Отмена"),
+                            (QFileDialog.LookIn, "Папка:"), (QFileDialog.FileName, "Выбрано:"),
+                            (QFileDialog.FileType, "Показывать:")):
+            self.setLabelText(label, text)
+        self.resize(860, 540)
+        self.chosen = []
+
+    def accept(self):
+        paths = [p for p in self.selectedFiles() if p]
+        if not paths:
+            return                       # ничего не выделено — окно остаётся открытым
+        self.chosen = paths
+        QDialog.accept(self)             # мимо QFileDialog.accept: тот вместо выбора зашёл бы в папку
+
+
+def pick_photos(parent, start_dir: str = "", extensions=()):
+    """(выбранные файлы и папки, папка, в которой окно закрыли) — пустой список при «Отмене»."""
+    dlg = PhotoPickDialog(parent, start_dir, extensions)
+    dlg.exec_()
+    chosen, folder = list(dlg.chosen), dlg.directory().absolutePath()
+    dlg.deleteLater()
+    return chosen, folder
+
+
 def _path_row(edit: QLineEdit, folder: bool, parent, filt: str = "") -> QWidget:
     w = QWidget()
     lay = QHBoxLayout(w)

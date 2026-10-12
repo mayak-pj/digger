@@ -188,3 +188,70 @@ def test_window_documents_table_and_open_path(window, tmp_path, monkeypatch):
     w._open_path(str(tmp_path / u"нет такого.pdf"))
     _pump(app, lambda: w.is_idle() and opened and u"Не найдено" in w.log_view.toPlainText())
     assert [os.path.basename(p) for p in opened] == ["a.png"]
+
+
+def test_scan_images_reads_subfolders(photo_dir, tmp_path):
+    """Папка читается вместе с подпапками (так лежат фото у пользователя); скрытые папки пропускаются."""
+    from digger.gui.models import scan_images
+    sub = os.path.join(photo_dir, u"партия 2", u"вырезки")
+    os.makedirs(sub)
+    deep = _png(os.path.join(sub, "deep.png"))
+    os.makedirs(os.path.join(photo_dir, ".Spotlight"))
+    _png(os.path.join(photo_dir, ".Spotlight", "junk.png"))
+    found, errors = scan_images([photo_dir])
+    assert not errors and len(found) == PHOTOS + 1
+    assert found[-1] == os.path.normpath(deep)                  # сначала фото самой папки, потом подпапок
+    assert not [p for p in found if ".Spotlight" in p]
+
+
+def test_one_dialog_picks_files_and_folders(qapp, photo_dir):
+    """Замечание пользователя: кнопкой «Добавить фото…» нельзя было выбрать папку. Теперь одно окно выбирает
+    и файл, и несколько файлов, и папку: «Добавить» на выделенной папке берёт её, а не заходит внутрь."""
+    from PyQt5.QtCore import QItemSelectionModel
+    from PyQt5.QtWidgets import QListView
+    from digger.gui.dialogs import PhotoPickDialog
+    from digger.gui.models import IMG_EXT
+    os.makedirs(os.path.join(photo_dir, u"партия 2"))
+    dlg = PhotoPickDialog(None, photo_dir, IMG_EXT)
+    dlg.show()
+    view = dlg.findChild(QListView, "listView")
+    model = view.model()
+
+    def rows():
+        root = view.rootIndex()
+        return dict((model.index(r, 0, root).data(), model.index(r, 0, root)) for r in range(model.rowCount(root)))
+
+    _pump(qapp, lambda: u"партия 2" in rows() and "chip_001.png" in rows(), timeout=30)
+    assert u"заметки.txt" not in rows()                          # показываются только картинки и папки
+    dlg.accept()
+    assert dlg.isVisible() and dlg.chosen == []                 # ничего не выделено — окно не закрывается
+    for name in (u"партия 2", "chip_000.png", "chip_001.png"):
+        view.selectionModel().select(rows()[name], QItemSelectionModel.Select | QItemSelectionModel.Rows)
+    qapp.processEvents()
+    dlg.accept()
+    assert not dlg.isVisible()
+    assert sorted(os.path.basename(p) for p in dlg.chosen) == ["chip_000.png", "chip_001.png", u"партия 2"]
+    assert os.path.isdir([p for p in dlg.chosen if p.endswith(u"партия 2")][0])
+    dlg.deleteLater()                    # окно и его модель диска убираются сразу, а не сборщиком посреди другого теста
+    _pump(qapp, lambda: True)
+
+
+def test_window_add_button_takes_folder_and_remembers_place(window, photo_dir, monkeypatch):
+    """Одна кнопка «Добавить фото…» (без отдельной «Добавить папку»): выбранная папка попадает в список целиком."""
+    from digger.gui import main_window
+    w, app = window
+    from PyQt5.QtWidgets import QToolBar
+    bar = [a.text() for a in w.findChild(QToolBar).actions()]
+    menu = [a.text() for a in w.menuBar().actions()[0].menu().actions()]
+    for titles in (bar, menu):          # панель и меню «Файл»: одна кнопка добавления, без «папки»
+        assert titles[0] == u"Добавить фото…" and not [t for t in titles if u"апк" in t]
+    asked = []
+    monkeypatch.setattr(main_window, "pick_photos",
+                        lambda parent, start, ext: asked.append(start) or ([photo_dir], os.path.dirname(photo_dir)))
+    w.add_files_dialog()
+    _pump(app, lambda: w.list.count() == PHOTOS and w.is_idle(), timeout=60)
+    monkeypatch.setattr(main_window, "pick_photos", lambda parent, start, ext: asked.append(start) or ([], start))
+    w.add_files_dialog()                                        # «Отмена» — ничего не добавляется
+    _pump(app, w.is_idle)
+    assert w.list.count() == PHOTOS
+    assert asked == ["", os.path.dirname(photo_dir)]            # второй раз окно открывается там же

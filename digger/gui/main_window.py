@@ -27,7 +27,7 @@ from ..extensions.loader import ExtensionManager
 from ..ui import theme as ui_theme
 from .chip_card import ChipCard
 from .conclusion_panel import ConclusionPanel
-from .dialogs import AdaptersDialog, DiagnosticsDialog, ExtensionsDialog, SettingsDialog
+from .dialogs import AdaptersDialog, DiagnosticsDialog, ExtensionsDialog, SettingsDialog, pick_photos
 from .docs_model import DocsModel, why_html
 from .feed_model import level_names
 from .models import IMG_EXT, THUMB, HitsModel, PhotoListModel, load_qimage, np_to_qimage, scan_images
@@ -100,7 +100,8 @@ class MainWindow(QMainWindow):
                 a.setToolTip(tip)
             tb.addAction(a)
             return a
-        act("Добавить фото…", "image-plus", self.add_files_dialog)
+        act("Добавить фото…", "image-plus", self.add_files_dialog,
+            "Одно фото, несколько (с Ctrl или Shift) или папка с фото целиком")
         self.a_run = act("Распознать", "scan-text", self.run_selected, "Распознать выбранные (или все новые) фото")
         self.a_web = act("Быстрый поиск", "search", lambda: self.web_search(None), WEB_TIP)
         self.a_web_all = act("Полный поиск", "globe", lambda: self.web_search(["all"]), WEB_ALL_TIP)
@@ -446,8 +447,8 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------ файлы
     def add_files_dialog(self):
-        paths = QFileDialog.getOpenFileNames(self, "Фото микросхем", "",
-                                             "Изображения (%s)" % " ".join("*" + e for e in IMG_EXT))[0]
+        """Одно окно выбора для всего: одно фото, несколько фото или папка (читается с подпапками)."""
+        paths, self._photo_dir = pick_photos(self, getattr(self, "_photo_dir", ""), IMG_EXT)
         self.add_files(paths)
 
     def add_files(self, paths):

@@ -44,7 +44,7 @@ def is_photo_name(name: str) -> bool:
 
 
 def scan_images(paths: Iterable[str], cancel: Any = None) -> Tuple[List[str], List[str]]:
-    """Файлы-картинки из списка файлов и папок: (найденные пути, недоступные пути)."""
+    """Файлы-картинки из списка файлов и папок (папки — с подпапками): (найденные пути, недоступные пути)."""
     found: List[str] = []
     errors: List[str] = []
     for p in paths:
@@ -52,8 +52,14 @@ def scan_images(paths: Iterable[str], cancel: Any = None) -> Tuple[List[str], Li
             break
         try:
             if os.path.isdir(p):
-                found += [os.path.normpath(os.path.join(p, fn)) for fn in sorted(os.listdir(p))
-                          if is_photo_name(fn)]
+                todo = [p]
+                while todo and not (cancel is not None and cancel.cancelled):
+                    d = todo.pop(0)
+                    names = sorted(os.listdir(d))
+                    found += [os.path.normpath(os.path.join(d, fn)) for fn in names if is_photo_name(fn)]
+                    # подпапки — после фото самой папки; скрытые (`.Spotlight-V100` на флешке) пропускаем
+                    todo += [os.path.join(d, fn) for fn in names
+                             if not fn.startswith(".") and not is_photo_name(fn) and os.path.isdir(os.path.join(d, fn))]
             elif is_photo_name(os.path.basename(p)):
                 if os.path.isfile(p):
                     found.append(os.path.normpath(p))
