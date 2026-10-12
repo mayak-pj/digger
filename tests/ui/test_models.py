@@ -236,6 +236,24 @@ def test_one_dialog_picks_files_and_folders(qapp, photo_dir):
     _pump(qapp, lambda: True)
 
 
+def test_dialog_sidebar_lists_drives_first(qapp, tmp_path, monkeypatch):
+    """Замечание пользователя: в своём окне выбора пропали флешка и внешний SSD — они снова на боковой панели."""
+    from digger.gui import dialogs
+    vols = tmp_path / "Volumes"
+    for name in (u"ФЛЕШКА", "SSD", ".timemachine"):
+        (vols / name).mkdir(parents=True)
+    monkeypatch.setattr(dialogs.sys, "platform", "darwin")
+    places = dialogs.quick_places(str(vols))
+    assert places[:2] == [str(vols / "SSD"), str(vols / u"ФЛЕШКА")]              # диски — первыми, скрытое пропущено
+    assert os.path.expanduser("~") in [os.path.normpath(p) for p in places] and len(places) == len(set(places))
+    assert dialogs.quick_places(str(tmp_path / u"нет"))                          # нет папки дисков — остаются папки пользователя
+    monkeypatch.setattr(dialogs, "quick_places", lambda: [str(vols / "SSD"), str(tmp_path)])
+    dlg = dialogs.PhotoPickDialog(None, str(tmp_path), (".png",))
+    assert [u.toLocalFile() for u in dlg.sidebarUrls()] == [str(vols / "SSD"), str(tmp_path)]
+    dlg.deleteLater()
+    _pump(qapp, lambda: True)
+
+
 def test_window_add_button_takes_folder_and_remembers_place(window, photo_dir, monkeypatch):
     """Одна кнопка «Добавить фото…» (без отдельной «Добавить папку»): выбранная папка попадает в список целиком."""
     from digger.gui import main_window

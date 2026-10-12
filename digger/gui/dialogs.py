@@ -5,12 +5,13 @@ from __future__ import annotations
 import datetime
 import io
 import os
+import sys
 
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtCore import QDir, QStandardPaths, Qt, QUrl
 from PyQt5.QtGui import QColor, QDesktopServices
 from PyQt5.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
                              QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox,
-                             QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
+                             QPushButton, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 from ..core.config import save_user_config
 from ..extensions.loader import STATES as EXTENSION_STATES
@@ -19,11 +20,32 @@ from ..ui import theme as ui_theme
 EXTENSION_COLORS = {"active": "#1a7f37", "failed": "#c62828", "incompatible": "#c62828"}
 
 
+def quick_places(volumes_dir: str = "/Volumes"):
+    """Папки для боковой панели окна выбора: диски (флешка, внешний SSD, сетевые буквы), потом папки пользователя.
+    Диски только перечисляются — без обращения к ним: отвалившийся сетевой диск не должен задерживать окно."""
+    if sys.platform == "win32":
+        drives = [d.absolutePath() for d in QDir.drives()]
+    else:                                # macOS: всё подключённое лежит в /Volumes
+        try:
+            drives = [os.path.join(volumes_dir, n) for n in sorted(os.listdir(volumes_dir)) if not n.startswith(".")]
+        except OSError:
+            drives = []
+    home = [QStandardPaths.writableLocation(k) for k in (QStandardPaths.DesktopLocation, QStandardPaths.DownloadLocation,
+                                                         QStandardPaths.PicturesLocation, QStandardPaths.DocumentsLocation,
+                                                         QStandardPaths.HomeLocation)]
+    out = []
+    for p in drives + home:
+        if p and p not in out:
+            out.append(p)
+    return out
+
+
 class PhotoPickDialog(QFileDialog):
     """Выбор фото одним окном: один файл, несколько файлов, папка или всё вперемешку.
 
     Системное окно Windows выбирает либо файлы, либо папку, поэтому окно — своё (Qt). «Добавить» на выделенной
-    папке берёт её целиком, а не заходит внутрь; зайти в папку — двойным щелчком. Диск читает модель Qt в фоне."""
+    папке берёт её целиком, а не заходит внутрь; зайти в папку — двойным щелчком. Диск читает модель Qt в фоне.
+    Слева — диски (флешка, внешний SSD) и папки пользователя, как в системном окне."""
 
     def __init__(self, parent=None, start_dir: str = "", extensions=()):
         super().__init__(parent, "Фото микросхем: выделите фото или папку", start_dir,
@@ -34,7 +56,11 @@ class PhotoPickDialog(QFileDialog):
                             (QFileDialog.LookIn, "Папка:"), (QFileDialog.FileName, "Выбрано:"),
                             (QFileDialog.FileType, "Показывать:")):
             self.setLabelText(label, text)
-        self.resize(860, 540)
+        self.setSidebarUrls([QUrl.fromLocalFile(p) for p in quick_places()])
+        self.resize(900, 540)
+        split = self.findChild(QSplitter)
+        if split is not None:            # панель дисков шире: имена флешек не должны обрезаться
+            split.setSizes([210, 690])
         self.chosen = []
 
     def accept(self):
